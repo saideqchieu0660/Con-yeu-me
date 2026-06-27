@@ -1130,16 +1130,14 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
   }
   
   let activeProviders: string[] = [];
-  if (ENABLE_GOOGLE() && geminiKeyStates.length > 0) activeProviders.push("gemini");
-  if (ENABLE_CEREBRAS() && groqKeyStates.length > 0) activeProviders.push("groq");
-  if (ENABLE_OPENROUTER() && openRouterKeyStates.length > 0) activeProviders.push("openrouter");
+  if (groqKeyStates.length > 0) activeProviders.push("groq");
 
   if (activeProviders.length === 0) {
     throw new Error("Tất cả Cổng API đều đã tắt hoặc hết key. Vui lòng bật ít nhất 1 nhà cung cấp.");
   }
 
   let attempt = 0;
-  let maxAttempts = Math.max(10, (isGroqEnabled ? groqKeyStates.length : 0) + (isOpenRouterEnabled ? openRouterKeyStates.length : 0) + (isGeminiEnabled ? geminiKeyStates.length : 0));
+  let maxAttempts = Math.max(10, groqKeyStates.length);
   
   let startProviderIndex = 0;
   if (activeProviders.length > 1) {
@@ -1204,63 +1202,6 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
              handleGroqError(state, err);
              finalError = err;
           }
-        }
-      } else if (provider === "openrouter") {
-        const numKeys = openRouterKeyStates.length;
-        for (let kIdx = 0; kIdx < numKeys; kIdx++) {
-          const { key, state } = getOpenRouterKey();
-          // Jitter Delay: 200ms to 600ms to prevent bot-detection
-          await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 400) + 200));
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 60000);
-          try {
-            const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                 "Content-Type": "application/json",
-                 "Authorization": `Bearer ${key}`,
-                 "HTTP-Referer": "http://localhost:3000",
-                 "X-Title": "Henosis App"
-              },
-              body: JSON.stringify({
-                 model: "openai/gpt-oss-120b:free",
-                 messages: [
-                   ...(config.systemInstruction ? [{ role: "system", content: config.systemInstruction }] : []),
-                   { role: "user", content: promptText }
-                 ],
-                 temperature: config.temperature ?? 0.3,
-                 ...(isJsonMode ? { response_format: { type: "json_object" } } : {})
-              }),
-              signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            if (!res.ok) throw new Error(`OpenRouter API Error: ${res.status}`);
-            const data = await res.json();
-            responseText = data?.choices?.[0]?.message?.content || "";
-            if (responseText) {
-               addOpenRouterRotationLog({ toKeyIndex: state.index, reason: `General execution successful` });
-               return responseText;
-            }
-          } catch (err: any) {
-             handleOpenRouterError(state, err);
-             finalError = err;
-          }
-        }
-      } else if (provider === "gemini") {
-        try {
-           // Jitter Delay: 200ms to 600ms to prevent bot-detection
-           await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 400) + 200));
-           responseText = await executeGeminiWithRetry(async (ai) => {
-              const res = await ai.models.generateContent({
-                 model: "gemini-2.5-flash",
-                 contents: contents,
-                 config: config
-              });
-              return res.text || "";
-           });
-           if (responseText) return responseText;
-        } catch (err: any) {
-           finalError = err;
         }
       }
     } catch (e: any) {
@@ -1339,114 +1280,7 @@ app.get("/api/models", async (req, res) => {
   }
 });
 
-// Secure Rotating Server-Side Proxy Route for OpenRouter AI calls
-app.post("/api/proxy/openrouter", async (req, res, next) => {
-  try {
-    await refreshApiToggles();
-    if (!ENABLE_OPENROUTER()) {
-      return res.status(503).json({ error: "OpenRouter API temporarily disabled by administrator to prevent rate limits." });
-    }
-    const { model, messages, temperature } = req.body;
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: "Messages array is required" });
-    }
-
-    // --- CONTENT SAFETY & PROHIBITED KEYWORD FILTER ---
-    const forbiddenKeywords = [
-      "hack", "exploit", "bypass", "malware", "virus", "phishing",
-      "nsfw", "porn", "violence", "kill", "murder", "suicide"
-    ];
-    const promptText = messages.map((m: any) => m.content).join(" ").toLowerCase();
-    for (const keyword of forbiddenKeywords) {
-      if (promptText.includes(keyword)) {
-        return res.status(403).json({ error: `[Content Safety] Request blocked due to prohibited keyword: ${keyword}.` });
-      }
-    }
-
-    if (openRouterKeyStates.length === 0) {
-      return res.status(503).json({ error: "OpenRouter is not configured on this server" });
-    }
-
-    let targetModel = model || "meta-llama/llama-3.1-8b-instruct:free";
-    if (targetModel === "meta-llama/llama-3-8b-instruct:free") {
-      targetModel = "meta-llama/llama-3.1-8b-instruct:free";
-    }
-
-    // --- HARD THROTTLING DELAY (10-12s) ---
-    const now = Date.now();
-    const lastTime = providerThrottleStates["openrouter"] || 0;
-    if (now - lastTime < 10000) {
-      return res.status(429).json({ error: "OpenRouter provider pool is currently cooling down to prevent rate limits. Please try another provider or wait 10 seconds." });
-    }
-    const throttleDelay = Math.floor(Math.random() * 2000) + 10000;
-    providerThrottleStates["openrouter"] = now + throttleDelay;
-
-    let attempts = 0;
-    const maxAttempts = Math.max(2, openRouterKeyStates.length);
-    let success = false;
-    let lastError: any = null;
-
-    while (attempts < maxAttempts && !success) {
-      const { key, state } = getOpenRouterKey();
-      const currentModel = "openai/gpt-oss-120b:free";
-      attempts++;
-      try {
-        console.log(`[OpenRouter Proxy Route] Attempt ${attempts}: Using key index ${state.index} (${state.maskedKey}) with model ${currentModel}`);
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${key}`,
-            "HTTP-Referer": "https://henosisweb.vercel.app",
-            "X-Title": "Henosis Learning App"
-          },
-          body: JSON.stringify({
-            model: currentModel,
-            messages,
-            temperature: temperature !== undefined ? temperature : 0.7
-          })
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          console.error("OpenRouter Error Details:", errText);
-          throw { status: response.status, message: errText };
-        }
-
-        const data = await response.json();
-        const content = data?.choices?.[0]?.message?.content;
-        
-        // Comprehensive check for empty/missing content
-        if (!content || (typeof content === 'string' && content.trim() === '')) {
-          console.warn(`[OpenRouter Proxy] Empty content detected for model ${currentModel}. Data: ${JSON.stringify(data)}`);
-          throw new Error("Empty content returned from OpenRouter API.");
-        }
-
-        success = true;
-        addOpenRouterRotationLog({
-           toKeyIndex: state.index,
-           reason: "Standard Chat Request completed successfully (200 OK)"
-        });
-        return res.json({ content, keyIndex: state.index, keyMasked: state.maskedKey });
-      } catch (err: any) {
-        lastError = err;
-        handleOpenRouterError(state, err);
-        console.warn(`[OpenRouter Proxy] Attempt ${attempts} failed using key ${state.index}:`, err.message || err);
-        // Cooldown delay trước khi thử key tiếp theo
-        await delay(500);
-      }
-    }
-
-    return res.status(502).json({
-      error: "All OpenRouter API Keys failed or rate-limited",
-      details: lastError?.message || lastError?.toString() || ""
-    });
-
-  } catch (error: any) {
-    console.error("OpenRouter Proxy Error:", error);
-    next(error);
-  }
-});
+// OpenRouter proxy route has been removed.
 
 // JWT Helper for Firebase ID Tokens
   const decodeFirebaseToken = (token: string) => {

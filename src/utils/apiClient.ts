@@ -23,16 +23,36 @@ const USER_AGENTS = [
   // Safari on iPhone
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/605.1.15",
   // Edge on Windows
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0"
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
 ];
 
 // Seeded proxy simulation and routing nodes list to prevent IP-sweeps and avoid server-level threshold locks
 let PROXIES = [
-  { url: "https://proxy-vn-central1.nodes.internal", region: "VN-Central", active: true },
-  { url: "https://proxy-sg-primary.nodes.internal", region: "Singapore", active: true },
-  { url: "https://proxy-us-west.nodes.internal", region: "US-West", active: true },
-  { url: "https://proxy-tokyo-edge.nodes.internal", region: "Tokyo", active: true },
-  { url: "https://proxy-frankfurt.nodes.internal", region: "Frankfurt", active: true }
+  {
+    url: "https://proxy-vn-central1.nodes.internal",
+    region: "VN-Central",
+    active: true,
+  },
+  {
+    url: "https://proxy-sg-primary.nodes.internal",
+    region: "Singapore",
+    active: true,
+  },
+  {
+    url: "https://proxy-us-west.nodes.internal",
+    region: "US-West",
+    active: true,
+  },
+  {
+    url: "https://proxy-tokyo-edge.nodes.internal",
+    region: "Tokyo",
+    active: true,
+  },
+  {
+    url: "https://proxy-frankfurt.nodes.internal",
+    region: "Frankfurt",
+    active: true,
+  },
 ];
 
 // Helper to generate a random credible look-alike public IP address
@@ -41,7 +61,7 @@ function generateRandomIP() {
     Math.floor(Math.random() * 140) + 40, // Avoid system IPs
     Math.floor(Math.random() * 255),
     Math.floor(Math.random() * 255),
-    Math.floor(Math.random() * 254) + 1
+    Math.floor(Math.random() * 254) + 1,
   ];
   return parts.join(".");
 }
@@ -51,7 +71,7 @@ const ACCEPT_LANGUAGES = [
   "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
   "en-US,en;q=0.9",
   "en-GB,en;q=0.8,ms;q=0.6",
-  "vi-VN,vi;q=0.9"
+  "vi-VN,vi;q=0.9",
 ];
 
 // ---- GLOBAL QUEUE SYSTEM & LOCKING ----
@@ -70,15 +90,16 @@ let lastCallTimestamp = 0;
 const callQueue: QueuedRequest[] = [];
 
 async function processQueue() {
-  if (callQueue.length === 0 || activeRequests >= PARALLEL_LIMIT || isTripped) return;
-  
+  if (callQueue.length === 0 || activeRequests >= PARALLEL_LIMIT || isTripped)
+    return;
+
   const now = Date.now();
   const timeSinceLast = now - lastCallTimestamp;
-  
+
   // Enforce minimal delay between outgoing dispatched requests
   if (timeSinceLast < MIN_DELAY_BETWEEN_CALLS) {
-     setTimeout(processQueue, MIN_DELAY_BETWEEN_CALLS - timeSinceLast);
-     return;
+    setTimeout(processQueue, MIN_DELAY_BETWEEN_CALLS - timeSinceLast);
+    return;
   }
 
   const task = callQueue.shift();
@@ -88,7 +109,10 @@ async function processQueue() {
   lastCallTimestamp = Date.now();
 
   try {
-    const response = await executeFetchWithBackoffAndEvasion(task.url, task.options);
+    const response = await executeFetchWithBackoffAndEvasion(
+      task.url,
+      task.options,
+    );
     task.resolve(response);
   } catch (err) {
     task.reject(err);
@@ -112,16 +136,20 @@ function handleFailure() {
     isTripped = true;
     penaltyTier++;
     const cooldownTime = getCooldownTime();
-    
+
     if (cooldownTimer) {
       clearTimeout(cooldownTimer);
     }
-    
-    console.warn(`[apiClient Circuit Breaker] Tripped! Blocking requests for ${cooldownTime / 1000} seconds. Tier: ${penaltyTier}`);
+
+    console.warn(
+      `[apiClient Circuit Breaker] Tripped! Blocking requests for ${cooldownTime / 1000} seconds. Tier: ${penaltyTier}`,
+    );
     cooldownTimer = setTimeout(() => {
       isTripped = false;
       failureCount = 0;
-      console.log('[apiClient Circuit Breaker] Reset: System is operational again.');
+      console.log(
+        "[apiClient Circuit Breaker] Reset: System is operational again.",
+      );
       processQueue(); // Resume queue operation
     }, cooldownTime);
   }
@@ -143,7 +171,7 @@ const INTERCEPTED_AI_ROUTES = [
   "/api/automation/process-chunk",
   "/api/convert-document-chunk",
   "/api/automation/hydrate-card",
-  "/api/automation/validate-json"
+  "/api/automation/validate-json",
 ];
 
 function cleanJsonResponse(text: string): string {
@@ -159,7 +187,10 @@ function cleanJsonResponse(text: string): string {
   return cleanText.trim();
 }
 
-async function buildGroqPayload(url: string, parsedBody: any): Promise<{ model: string; messages: any[] }> {
+async function buildGroqPayload(
+  url: string,
+  parsedBody: any,
+): Promise<{ model: string; messages: any[] }> {
   const model = "google/gemini-2.5-flash"; // Updated to Gemini 2.5 Flash for gold-standard stability and speed
 
   let messages: any[] = [];
@@ -184,8 +215,12 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
   ]
 }`;
     messages = [
-      { role: "system", content: "You are an elite instructional designer. You must only respond in JSON format conforming to the user's specification without markdown blocks." },
-      { role: "user", content: prompt }
+      {
+        role: "system",
+        content:
+          "You are an elite instructional designer. You must only respond in JSON format conforming to the user's specification without markdown blocks.",
+      },
+      { role: "user", content: prompt },
     ];
   } else if (url.includes("/api/agent2/explain")) {
     const { term, definition, fastMode } = parsedBody;
@@ -193,50 +228,68 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
     if (fastMode) {
       const defaultFast = `Giải nghĩa khái niệm "{term}" (Định nghĩa của người dùng: {definition}).\nYÊU CẦU QUAN TRỌNG NHẤT:\n1. ĐI THẲNG VÀO NỘI DUNG, BỎ QUA MỌI LỜI CHÀO HỎI xã giao hay câu mào đầu.\n2. Dài khoảng tối thiểu 250 chữ, giải thích bản chất súc tích nhưng đầy đủ sinh động, trực quan.\n3. BẮT BUỘC có cấu trúc:- Bản chất cốt lõi (1 câu cực gọn).- Đi sâu vào chi tiết giải thích bản chất thực sự của khái niệm.- 1 Ví dụ minh hoạ thực tế sinh động.- NẾU LÀ TIẾNG ANH (từ đơn, cụm động từ, thành ngữ, v.v.): Bắt buộc cung cấp loại từ, giải thích cặn kẽ nguồn gốc (etymology) của nó để người học dễ nhớ hơn, KÈM THEO ĐÓ LÀ PHIÊN ÂM TRONG TIẾNG ANH (IPA).- Kết bằng câu hỏi gợi mở suy luận.\nChỉ trả ra nội dung (markdown).`;
       let template = aiPromptsConfig?.agent2_fast || defaultFast;
-      prompt = template.replace(/{term}/g, term).replace(/{definition}/g, definition || "Không có");
+      prompt = template
+        .replace(/{term}/g, term)
+        .replace(/{definition}/g, definition || "Không có");
     } else {
       const defaultDetailed = `Phân tích khái niệm "{term}" (Định nghĩa: {definition}).\nYÊU CẦU QUAN TRỌNG NHẤT:\n1. ĐI THẲNG VÀO NỘI DUNG, BỎ QUA MỌI LỜI CHÀO HỎI xã giao hay câu mào đầu.\n2. Dài khoảng tối thiểu 250 chữ, giải thích bản chất cốt lõi cực kỳ chi tiết, dễ hiểu.\n3. BẮT BUỘC CÁC BƯỚC:\n- Định nghĩa & Bản chất cốt lõi.\n- NẾU LÀ TIẾNG ANH (từ đơn, cụm động từ, thành ngữ, v.v.): Bắt buộc cung cấp loại từ, giải thích cặn kẽ nguồn gốc (etymology) của nó để người học có thể nhớ sâu hơn, KÈM THEO ĐÓ LÀ PHIÊN ÂM TRONG TIẾNG ANH (IPA).\n- Mở rộng vấn đề và góc nhìn phân tích.\n- BẮT BUỘC kết thúc bằng 1 câu hỏi gợi mở liên quan đến ứng dụng hoặc tính chất cốt lõi để thúc đẩy học sinh tự suy nghĩ và phát triển kiến thức.\nBọc công thức Toán/Lý/Hóa bằng LaTeX (dấu $ hoặc $$). Chỉ trả ra nội dung (markdown).`;
       let template = aiPromptsConfig?.agent2_detailed || defaultDetailed;
-      prompt = template.replace(/{term}/g, term).replace(/{definition}/g, definition || "Không có");
+      prompt = template
+        .replace(/{term}/g, term)
+        .replace(/{definition}/g, definition || "Không có");
     }
     messages = [
-      { role: "system", content: aiPromptsConfig?.agent2_system || "You are a professional educational coach. Answer immediately using clean Vietnamese Markdown without conversational introductions." },
-      { role: "user", content: prompt }
+      {
+        role: "system",
+        content:
+          aiPromptsConfig?.agent2_system ||
+          "You are a professional educational coach. Answer immediately using clean Vietnamese Markdown without conversational introductions.",
+      },
+      { role: "user", content: prompt },
     ];
   } else if (url.includes("/api/agent3/chat")) {
-    const { message, history, context, mode, mcqData, difficulty, category_context, responseLength } = parsedBody;
+    const {
+      message,
+      history,
+      context,
+      mode,
+      mcqData,
+      difficulty,
+      category_context,
+      responseLength,
+    } = parsedBody;
     let { responseMode } = parsedBody;
-    
+
     // Tầng 1 - Routing (nếu responseMode là auto)
     if (responseMode === "auto" && mode === "chat") {
-      const tier1PromptTemplate = aiPromptsConfig?.agent3_tier1 || `Mày là Agent 3 Tier 1 Router. Phân tích ngữ cảnh và trả về đúng 1 từ khóa duy nhất: direct, debate, hoặc socrates.`;
+      const tier1PromptTemplate =
+        aiPromptsConfig?.agent3_tier1 ||
+        `Mày là Agent 3 Tier 1 Router. Phân tích ngữ cảnh và trả về đúng 1 từ khóa duy nhất: direct, debate, hoặc socrates.`;
       try {
         console.log("[Agent 3 Tier 1] Running routing logic...");
         const pool = getInterleavedPool();
         let content = "";
         const systemPrompt = { role: "system", content: tier1PromptTemplate };
-        const userPrompt = { role: "user", content: `History: ${JSON.stringify(history?.slice(-3) || [])}\nMessage: ${message}` };
+        const userPrompt = {
+          role: "user",
+          content: `History: ${JSON.stringify(history?.slice(-3) || [])}\nMessage: ${message}`,
+        };
 
         for (const item of pool) {
           try {
-            if (item.provider === "gemini") {
-              content = await fetchGeminiDirect(item.key, [systemPrompt, userPrompt], false);
-              break;
-            } else if (item.provider === "groq") {
-              content = await fetchGroqDirect(item.key, [systemPrompt, userPrompt], false);
-              break;
-            } else if (item.provider === "openRouter") {
-              content = await fetchOpenRouterDirect(item.key, "google/gemini-2.5-flash", [systemPrompt, userPrompt], false);
-              break;
-            } else if (item.provider === "deepInfra") {
-              content = await fetchDeepInfraDirect(item.key, [systemPrompt, userPrompt], false);
+            if (item.provider === "cerebras" || item.provider === "groq") {
+              content = await fetchCerebrasDirect(
+                item.key,
+                [systemPrompt, userPrompt],
+                false,
+              );
               break;
             }
           } catch (e) {
             continue; // try next key
           }
         }
-        
+
         content = content.trim().toLowerCase();
         if (content.includes("direct")) {
           responseMode = "direct";
@@ -247,11 +300,14 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
         }
         console.log(`[Agent 3 Tier 1] Router decided: ${responseMode}`);
       } catch (tier1Err) {
-        console.warn("[Agent 3 Tier 1] Routing failed, defaulting to socratic", tier1Err);
+        console.warn(
+          "[Agent 3 Tier 1] Routing failed, defaulting to socratic",
+          tier1Err,
+        );
         responseMode = "socratic";
       }
     }
-    
+
     let styleGuidance = "";
     if (responseLength === "super_detailed") {
       const defaultSuperDetailed = `\nĐỘ CHI TIẾT - SIÊU CHI TIẾT (SUPER DETAILED MODE):
@@ -259,14 +315,16 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
 - BẮT BUỘC TỐI CAO: Trả lời cực kỳ dài dặn, đầy đủ chi tiết, dồi dào chữ nghĩa, cặn kẽ và phong phú (tối thiểu bắt buộc 600 từ). Tuyệt đối cấm trả lời sơ sài hoặc ngắn gọn!
 - Cung cấp ít nhất 3 ví dụ minh họa thực tế sinh động. Cắt nghĩa cặn kẽ từng thứ.
 - Tuyệt đối bỏ qua hoàn toàn mọi yêu cầu viết ngắn gọn.`;
-      styleGuidance = aiPromptsConfig?.agent3_length_super_detailed || defaultSuperDetailed;
+      styleGuidance =
+        aiPromptsConfig?.agent3_length_super_detailed || defaultSuperDetailed;
     } else if (responseLength === "detailed") {
       const defaultDetailed = `\nĐỘ CHI TIẾT - CHI TIẾT (DETAILED MODE):
 - Tập trung vào bản chất cốt lõi. Trả lời chi tiết ở mức độ vừa đủ trọn vẹn.
 - Dài khoảng 250 - 400 chữ.
 - Bắt buộc có 1 - 2 ví dụ cụ thể để làm rõ nghĩa.
 - Không được quá siêu ngắn gọn, nhưng cũng đừng lê thê lan man, giữ độ dài lý tưởng.`;
-      styleGuidance = aiPromptsConfig?.agent3_length_detailed || defaultDetailed;
+      styleGuidance =
+        aiPromptsConfig?.agent3_length_detailed || defaultDetailed;
     } else {
       const defaultConcise = `\nĐỘ CHI TIẾT - SÚC TÍCH (CONCISE MODE):
 - Trả lời cực kỳ ngắn gọn, tối giản (chỉ 1-3 câu).
@@ -274,7 +332,9 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
       styleGuidance = aiPromptsConfig?.agent3_length_concise || defaultConcise;
     }
 
-    const englishRuleTemplate = aiPromptsConfig?.agent3_english_rule || `\nĐẶC QUYỀN VỀ TIẾNG ANH & GIAO TIẾP: Đi thẳng vào nội dung, bỏ qua mọi lời chào hỏi xã giao. Nếu thông tin đầu vào là tiếng Anh (có thể là từ đơn, cụm động từ, thành ngữ, v.v.), BẮT BUỘC cung cấp loại từ (part of speech), giải thích cặn kẽ nguồn gốc của nó (etymology) để giúp người học dễ nhớ hơn, KÈM THEO ĐÓ LÀ PHIÊN ÂM TRONG TIẾNG ANH (IPA).`;
+    const englishRuleTemplate =
+      aiPromptsConfig?.agent3_english_rule ||
+      `\nĐẶC QUYỀN VỀ TIẾNG ANH & GIAO TIẾP: Đi thẳng vào nội dung, bỏ qua mọi lời chào hỏi xã giao. Nếu thông tin đầu vào là tiếng Anh (có thể là từ đơn, cụm động từ, thành ngữ, v.v.), BẮT BUỘC cung cấp loại từ (part of speech), giải thích cặn kẽ nguồn gốc của nó (etymology) để giúp người học dễ nhớ hơn, KÈM THEO ĐÓ LÀ PHIÊN ÂM TRONG TIẾNG ANH (IPA).`;
     const englishRule = englishRuleTemplate;
 
     let systemPrompt = "";
@@ -287,7 +347,9 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
 4. FORMAT: Dùng LaTeX ($$, $).{englishRule}
 {styleGuidance}`;
       let template = aiPromptsConfig?.agent3_direct || defaultDirect;
-      systemPrompt = template.replace("{englishRule}", englishRule).replace("{styleGuidance}", styleGuidance);
+      systemPrompt = template
+        .replace("{englishRule}", englishRule)
+        .replace("{styleGuidance}", styleGuidance);
     } else if (responseMode === "debate") {
       const defaultDebate = `Mày là trợ lý AI tên Agent 3 (Devil's Advocate / Tranh biện Mode).
 ĐIỀU KHOẢN TỐI THƯỢNG:
@@ -297,15 +359,18 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
 4. FORMAT: Dùng LaTeX ($$, $).{englishRule}
 {styleGuidance}`;
       let template = aiPromptsConfig?.agent3_debate || defaultDebate;
-      systemPrompt = template.replace("{englishRule}", englishRule).replace("{styleGuidance}", styleGuidance);
+      systemPrompt = template
+        .replace("{englishRule}", englishRule)
+        .replace("{styleGuidance}", styleGuidance);
     } else {
       const defaultSocraticLong = `2. PHƯƠNG PHÁP SOCRATIC: BẮT BUỘC PHẢI THỰC HIỆN ĐẦY ĐỦ số lượng chữ đã yêu cầu trước (dài dặn cặn kẽ), CẤM TRẢ LỜI NGẮN. Sau khi giải thích xong theo đúng chuẩn chiều dài, chỉ đặt MỘT VÀ CHỈ MỘT câu hỏi gợi mở ở TẬN CÙNG để thúc đẩy tự suy nghĩ.`;
       const defaultSocraticShort = `2. PHƯƠNG PHÁP SOCRATIC: Không bao giờ cho đáp án dễ dàng. Luôn dồn ép bằng câu hỏi gợi mở suy luận.`;
-      
-      const socraticRule = (responseLength === "detailed" || responseLength === "super_detailed")
-        ? (aiPromptsConfig?.agent3_socratic_long_rule || defaultSocraticLong)
-        : (aiPromptsConfig?.agent3_socratic_short_rule || defaultSocraticShort);
-        
+
+      const socraticRule =
+        responseLength === "detailed" || responseLength === "super_detailed"
+          ? aiPromptsConfig?.agent3_socratic_long_rule || defaultSocraticLong
+          : aiPromptsConfig?.agent3_socratic_short_rule || defaultSocraticShort;
+
       const defaultSocrates = `Mày là Agent 3 - Socrates AI Coach.
 QUY TẮC CỐT LÕI:
 1. XƯNG HÔ "MÀY/TAO": Bắt buộc xưng "tao" và gọi người dùng là "mày". Cấm dùng "bạn", "tôi", "mình".
@@ -314,17 +379,26 @@ QUY TẮC CỐT LÕI:
 4. FORMAT: Dùng LaTeX.{englishRule}
 {styleGuidance}`;
       let template = aiPromptsConfig?.agent3_socrates || defaultSocrates;
-      systemPrompt = template.replace("{socraticRule}", socraticRule).replace("{englishRule}", englishRule).replace("{styleGuidance}", styleGuidance);
+      systemPrompt = template
+        .replace("{socraticRule}", socraticRule)
+        .replace("{englishRule}", englishRule)
+        .replace("{styleGuidance}", styleGuidance);
     }
 
     let prompt = "";
     if (mode === "quiz" && mcqData) {
       let difficultyGuidance = "Cấp độ trung bình.";
       const diffLevel = difficulty || "medium";
-      if (diffLevel === "easy") difficultyGuidance = "Cấp độ dễ: Hỏi trực tiếp định nghĩa cơ bản, nhận biết trực tiếp.";
-      if (diffLevel === "medium") difficultyGuidance = "Cấp độ trung bình: Yêu cầu hiểu sâu hơn, áp dụng cơ bản.";
-      if (diffLevel === "hard") difficultyGuidance = "Cấp độ khó: Đánh đố, vận dụng cao, suy luận logic tổng hợp.";
-      
+      if (diffLevel === "easy")
+        difficultyGuidance =
+          "Cấp độ dễ: Hỏi trực tiếp định nghĩa cơ bản, nhận biết trực tiếp.";
+      if (diffLevel === "medium")
+        difficultyGuidance =
+          "Cấp độ trung bình: Yêu cầu hiểu sâu hơn, áp dụng cơ bản.";
+      if (diffLevel === "hard")
+        difficultyGuidance =
+          "Cấp độ khó: Đánh đố, vận dụng cao, suy luận logic tổng hợp.";
+
       if (category_context) {
         prompt = `Tạo một bài Test 15 câu trắc nghiệm MCQ cho mục học "${category_context.name}". Giới hạn phạm vi tạo câu hỏi CHỈ xoay quanh các khái niệm, định nghĩa và kiến thức học tập trong mục học này dựa trên danh sách thẻ dữ liệu dưới đây. Độ khó: ${difficultyGuidance}\nTrả về đúng 1 mảng JSON chứa các object: {"question": "...", "options": ["A...","B...","C...","D..."], "correctIndex": 0..3, "explanation": "..."}. KHÔNG trả về thứ gì khác ngoài JSON.\nDữ liệu các thẻ trong mục học này: ${JSON.stringify(mcqData)}`;
       } else {
@@ -332,26 +406,33 @@ QUY TẮC CỐT LÕI:
       }
       messages = [
         { role: "system", content: systemPrompt },
-        { role: "user", content: prompt }
+        { role: "user", content: prompt },
       ];
     } else {
       let previousHistoryText = "";
       if (history && Array.isArray(history)) {
-        previousHistoryText = history.map(msg => {
-           const label = msg.role === "ai" ? "AI" : "USER";
-           let text = msg.text;
-           if (msg.role === "ai") {
-              text = text.replace(/\bBạn\b/g, "Mày").replace(/\bbạn\b/g, "mày")
-                         .replace(/\bMình\b/g, "Tao").replace(/\bmình\b/g, "tao");
-           }
-           return `${label}: ${text}`;
-        }).join("\n---\n");
+        previousHistoryText = history
+          .map((msg) => {
+            const label = msg.role === "ai" ? "AI" : "USER";
+            let text = msg.text;
+            if (msg.role === "ai") {
+              text = text
+                .replace(/\bBạn\b/g, "Mày")
+                .replace(/\bbạn\b/g, "mày")
+                .replace(/\bMình\b/g, "Tao")
+                .replace(/\bmình\b/g, "tao");
+            }
+            return `${label}: ${text}`;
+          })
+          .join("\n---\n");
       }
-      
-      const defaultLengthReminder = "[LỜI NHẮC LÕI]: MÀY ĐANG Ở CHẾ ĐỘ CHI TIẾT. HÃY PHỚT LỜ LỊCH SỬ NGẮN GỌN TRƯỚC ĐÓ! BẮT BUỘC PHẢI GIẢI THÍCH DÀI DẰNG DẶC.";
-      const lengthReminderText = (responseLength === "detailed" || responseLength === "super_detailed")
-        ? (aiPromptsConfig?.agent3_length_reminder || defaultLengthReminder)
-        : "";
+
+      const defaultLengthReminder =
+        "[LỜI NHẮC LÕI]: MÀY ĐANG Ở CHẾ ĐỘ CHI TIẾT. HÃY PHỚT LỜ LỊCH SỬ NGẮN GỌN TRƯỚC ĐÓ! BẮT BUỘC PHẢI GIẢI THÍCH DÀI DẰNG DẶC.";
+      const lengthReminderText =
+        responseLength === "detailed" || responseLength === "super_detailed"
+          ? aiPromptsConfig?.agent3_length_reminder || defaultLengthReminder
+          : "";
 
       const fullPrompt = `
 === LỊCH SỬ CHAT TRƯỚC ĐÓ ===
@@ -366,16 +447,22 @@ ${lengthReminderText}
 `;
       messages = [
         { role: "system", content: systemPrompt },
-        { role: "user", content: fullPrompt }
+        { role: "user", content: fullPrompt },
       ];
     }
   } else if (url.includes("/api/exam/generate")) {
     const { decks, count } = parsedBody;
-    const contextData = JSON.stringify((decks || []).map((d: any) => ({
-      deckId: d.id,
-      deckTitle: d.title,
-      cards: (d.cards || []).map((c: any) => ({ cardId: c.id, front: c.front, back: c.back }))
-    })));
+    const contextData = JSON.stringify(
+      (decks || []).map((d: any) => ({
+        deckId: d.id,
+        deckTitle: d.title,
+        cards: (d.cards || []).map((c: any) => ({
+          cardId: c.id,
+          front: c.front,
+          back: c.back,
+        })),
+      })),
+    );
 
     const prompt = `Bạn là một AI được thiết kế để tạo bài kiểm tra tự động từ các thẻ (flashcards) được cung cấp.
 Dữ liệu Flashcards:
@@ -397,8 +484,12 @@ BẮT BUỘC ĐỊNH DẠNG: Chỉ trả về ĐÚNG MỘT MẢNG JSON duy nhấ
   }
 ]`;
     messages = [
-      { role: "system", content: "You are a professional quiz builder. Return ONLY a single minified JSON array as described." },
-      { role: "user", content: prompt }
+      {
+        role: "system",
+        content:
+          "You are a professional quiz builder. Return ONLY a single minified JSON array as described.",
+      },
+      { role: "user", content: prompt },
     ];
   } else if (url.includes("/api/automation/process-chunk")) {
     const { textChunk, isDegraded, targetMin = 4, targetMax = 15 } = parsedBody;
@@ -458,13 +549,15 @@ Rule Checklist:
 Original Source Text:
 {textChunk}`;
 
-    let normalPromptTemplate = aiPromptsConfig?.united_process_chunk_normal || defaultNormalPrompt;
+    let normalPromptTemplate =
+      aiPromptsConfig?.united_process_chunk_normal || defaultNormalPrompt;
     const normalPrompt = normalPromptTemplate
       .replace(/{targetMin}/g, targetMin.toString())
       .replace(/{targetMax}/g, targetMax.toString())
       .replace(/{textChunk}/g, textChunk);
 
-    let degradedPromptTemplate = aiPromptsConfig?.united_process_chunk_degraded || defaultDegradedPrompt;
+    let degradedPromptTemplate =
+      aiPromptsConfig?.united_process_chunk_degraded || defaultDegradedPrompt;
     const degradedPrompt = degradedPromptTemplate
       .replace(/{targetMin}/g, targetMin.toString())
       .replace(/{targetMax}/g, targetMax.toString())
@@ -472,8 +565,12 @@ Original Source Text:
 
     const actPrompt = isDegraded ? degradedPrompt : normalPrompt;
     messages = [
-      { role: "system", content: "You are an elite lexicographer. Return ONLY a valid JSON array of extracted flashcards according to the user's instructions. Do not use Markdown wraps." },
-      { role: "user", content: actPrompt }
+      {
+        role: "system",
+        content:
+          "You are an elite lexicographer. Return ONLY a valid JSON array of extracted flashcards according to the user's instructions. Do not use Markdown wraps.",
+      },
+      { role: "user", content: actPrompt },
     ];
   } else if (url.includes("/api/convert-document-chunk")) {
     const { chunkWords } = parsedBody;
@@ -494,12 +591,20 @@ BẮT BUỘC ĐỊNH DẠNG JSON MẢNG TƯƠNG THÍCH HOÀN TOÀN NHƯ SAU:
  
 CỤM DỮ LIỆU THÔ CẦN XỬ LÝ:
 {chunkWords}`;
-    let promptTemplate = aiPromptsConfig?.united_convert_document_chunk || defaultPrompt;
-    const prompt = promptTemplate.replace(/{chunkWords}/g, (chunkWords || []).join("\n"));
+    let promptTemplate =
+      aiPromptsConfig?.united_convert_document_chunk || defaultPrompt;
+    const prompt = promptTemplate.replace(
+      /{chunkWords}/g,
+      (chunkWords || []).join("\n"),
+    );
 
     messages = [
-      { role: "system", content: "You are a compiler. Output ONLY a valid JSON array conforming to the specification." },
-      { role: "user", content: prompt }
+      {
+        role: "system",
+        content:
+          "You are a compiler. Output ONLY a valid JSON array conforming to the specification.",
+      },
+      { role: "user", content: prompt },
     ];
   } else if (url.includes("/api/automation/hydrate-card")) {
     const { front, wordForm, back } = parsedBody;
@@ -523,8 +628,12 @@ Do not include any markdown wrapper or extra text.`;
       .replace(/{back}/g, back || "unknown");
 
     messages = [
-      { role: "system", content: "You are an expert lexicographer. Return ONLY a single minified JSON object as specified." },
-      { role: "user", content: prompt }
+      {
+        role: "system",
+        content:
+          "You are an expert lexicographer. Return ONLY a single minified JSON object as specified.",
+      },
+      { role: "user", content: prompt },
     ];
   } else if (url.includes("/api/automation/validate-json")) {
     const { jsonText } = parsedBody;
@@ -552,8 +661,12 @@ Dữ liệu đầu vào cần sửa lỗi:
     const prompt = promptTemplate.replace(/{jsonText}/g, jsonText);
 
     messages = [
-      { role: "system", content: "You are an expert JSON normalizer. Output ONLY a valid JSON array conforming to the specification." },
-      { role: "user", content: prompt }
+      {
+        role: "system",
+        content:
+          "You are an expert JSON normalizer. Output ONLY a valid JSON array conforming to the specification.",
+      },
+      { role: "user", content: prompt },
     ];
   }
 
@@ -565,13 +678,17 @@ let openRouterDisabledUntil = 0;
 let openRouterConsecutiveFailures = 0;
 
 // Force robust 45s Timeout helper
-async function fetchWithTimeout(url: string, options: RequestInit, ms = 45000): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  ms = 45000,
+): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
   try {
     const response = await fetch(url, {
       ...options,
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(id);
     return response;
@@ -581,150 +698,43 @@ async function fetchWithTimeout(url: string, options: RequestInit, ms = 45000): 
   }
 }
 
-async function fetchOpenRouterWithBackoff(model: string, messages: any[], attemptsLeft = 1, delayMs = 500): Promise<string> {
-  if (Date.now() < openRouterDisabledUntil) {
-    throw new Error("Circuit Breaker: OpenRouter is currently disabled. Fast fallback to Gemini.");
-  }
+// Function removed because OpenRouter is no longer used.
 
-  try {
-    const rawRes = await fetchWithTimeout("/api/proxy/openrouter", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.1,
-        max_tokens: 4096 // Force-set directly to 4096
-      })
-    }, 45000);
-
-    if (rawRes.ok) {
-      const data = await rawRes.json();
-      if (data && typeof data.content === "string") {
-        openRouterConsecutiveFailures = 0;
-        return data.content;
-      }
-    }
-    
-    // Yêu cầu: Silent bypass for 404, 403, 402, or "paid version" errors
-    const errText = await rawRes.text();
-    if ([402, 403, 404].includes(rawRes.status) || errText.toLowerCase().includes("unavailable for free") || errText.toLowerCase().includes("paid version")) {
-       console.warn(`[apiClient Silent Bypass] Provider error: ${rawRes.status} - ${errText}`);
-       throw new Error("PROVIDER_SILENT_FAIL"); // Đánh dấu để key rotation nhảy sang key tiếp theo
-    }
-    
-    throw new Error(`Proxy error: ${rawRes.status} - ${errText}`);
-  } catch (proxyErr: any) {
-    if (proxyErr.message && (proxyErr.message.includes("503") || proxyErr.message.includes("disabled") || proxyErr.message.includes("tắt"))) {
-      console.warn("[apiClient Circuit Breaker] OpenRouter disabled on backend. Skipping client fallback.");
-      throw proxyErr;
-    }
-    console.warn("[apiClient] Backend OpenRouter proxy route failed, checking client-side key fallback...", proxyErr.message || proxyErr);
-    
-    const { ClientOpenRouterManager, fetchWithKeyRotation } = await import("../legacy_isolated/gemini").catch(() => ({ ClientOpenRouterManager: null, fetchWithKeyRotation: null }));
-    
-    if (ClientOpenRouterManager && ClientOpenRouterManager.getKey() !== null) {
-      try {
-        const rawRes = await fetchWithKeyRotation!(ClientOpenRouterManager, (apiKey) => {
-          return fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${apiKey}`,
-              "HTTP-Referer": "https://henosisweb.vercel.app",
-              "X-Title": "Henosis Learning App"
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash", // Updated to Gemini 2.5 Flash for gold-standard stability and speed
-              messages,
-              temperature: 0.7,
-              max_tokens: 4096 // Force-set directly to 4096
-            })
-          });
-        }, Math.max(2, attemptsLeft));
-
-        if (!rawRes.ok) {
-          const errText = await rawRes.text();
-          console.error("OpenRouter Error Details:", errText);
-          throw new Error(`Rotated direct key error: ${rawRes.status}`);
-        }
-
-        const data = await rawRes.json();
-        const content = data?.choices?.[0]?.message?.content;
-        if (content === undefined || content === null) {
-          throw new Error("Empty content returned from rotated direct OpenRouter API.");
-        }
-        
-        openRouterConsecutiveFailures = 0;
-        return content;
-      } catch (err: any) {
-        console.warn(`[OpenRouter Rotator Direct Client] Exhausted fallback rotation. Error:`, err);
-      }
-    } else {
-      const singleKey = import.meta.env.VITE_OPENROUTER_KEY || "";
-      if (singleKey) {
-        try {
-          const rawRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${singleKey}`,
-              "HTTP-Referer": "https://henosisweb.vercel.app",
-              "X-Title": "Henosis Learning App"
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash", // Updated to Gemini 2.5 Flash for gold-standard stability and speed
-              messages,
-              temperature: 0.7,
-              max_tokens: 4096 // Force-set directly to 4096
-            })
-          });
-
-          if (rawRes.status === 429) {
-             throw new Error("429 Rate limit single key fallback");
-          }
-
-          if (!rawRes.ok) {
-            const errText = await rawRes.text();
-            console.error("OpenRouter Error Details:", errText);
-            throw new Error("HTTP " + rawRes.status);
-          }
-          
-          const data = await rawRes.json();
-          openRouterConsecutiveFailures = 0;
-          return data?.choices?.[0]?.message?.content;
-        } catch (singleErr) {
-           console.warn("Single key fallback failed too", singleErr);
-        }
-      }
-    }
-    
-    openRouterConsecutiveFailures++;
-    if (openRouterConsecutiveFailures >= 2) {
-       openRouterDisabledUntil = Date.now() + 15 * 60 * 1000;
-       console.warn("[apiClient Circuit Breaker] OpenRouter failed twice consecutively. Disabling OpenRouter route for 15 minutes.");
-    }
-    
-    throw new Error("No valid OpenRouter provider available. " + (proxyErr.message || proxyErr));
-  }
-}
-
-async function mapOpenRouterResponse(url: string, content: string): Promise<Response> {
+async function mapOpenRouterResponse(
+  url: string,
+  content: string,
+): Promise<Response> {
   const cleanContent = cleanJsonResponse(content);
   let parsedData: any = null;
 
-  if (url.includes("/api/agent/lesson-plan") || url.includes("/api/agent2/explain") || url.includes("/api/agent3/chat") || url.includes("/api/exam/generate")) {
-    parsedData = { result: content }; 
-  } else if (url.includes("/api/automation/process-chunk") || url.includes("/api/automation/validate-json")) {
+  if (
+    url.includes("/api/agent/lesson-plan") ||
+    url.includes("/api/agent2/explain") ||
+    url.includes("/api/agent3/chat") ||
+    url.includes("/api/exam/generate")
+  ) {
+    parsedData = { result: content };
+  } else if (
+    url.includes("/api/automation/process-chunk") ||
+    url.includes("/api/automation/validate-json")
+  ) {
     try {
       const parsed = JSON.parse(cleanContent);
-      parsedData = { success: true, cards: parsed, keyIndex: "OpenRouter", keyMasked: "OR-Gemma2" };
+      parsedData = {
+        success: true,
+        cards: parsed,
+        keyIndex: "OpenRouter",
+        keyMasked: "OR-Gemma2",
+      };
     } catch (e) {
       const match = cleanContent.match(/\[\s*\{[\s\S]*\}\s*\]/);
       if (match) {
-        parsedData = { success: true, cards: JSON.parse(match[0]), keyIndex: "OpenRouter", keyMasked: "OR-Gemma2" };
+        parsedData = {
+          success: true,
+          cards: JSON.parse(match[0]),
+          keyIndex: "OpenRouter",
+          keyMasked: "OR-Gemma2",
+        };
       } else {
         throw new Error("Unable to parse response as clean JSON array.");
       }
@@ -738,13 +748,19 @@ async function mapOpenRouterResponse(url: string, content: string): Promise<Resp
       if (match) {
         parsedData = { flashcards: JSON.parse(match[0]) };
       } else {
-        throw new Error("Unable to parse response as clean document-chunk array.");
+        throw new Error(
+          "Unable to parse response as clean document-chunk array.",
+        );
       }
     }
   } else if (url.includes("/api/automation/hydrate-card")) {
     try {
       const parsed = JSON.parse(cleanContent);
-      parsedData = { success: true, example: parsed.example || "", origin: parsed.origin || "" };
+      parsedData = {
+        success: true,
+        example: parsed.example || "",
+        origin: parsed.origin || "",
+      };
     } catch (e) {
       throw new Error("Unable to parse hydrated card JSON.");
     }
@@ -765,17 +781,23 @@ async function mapOpenRouterResponse(url: string, content: string): Promise<Resp
         statusText: "OK",
         headers: new Headers({ "Content-Type": "application/json" }),
         json: async () => {
-          if (isRead) throw new TypeError("Failed to execute 'json' on 'Response': body stream already read");
+          if (isRead)
+            throw new TypeError(
+              "Failed to execute 'json' on 'Response': body stream already read",
+            );
           isRead = true;
           return parsedData;
         },
         text: async () => {
-          if (isRead) throw new TypeError("Failed to execute 'text' on 'Response': body stream already read");
+          if (isRead)
+            throw new TypeError(
+              "Failed to execute 'text' on 'Response': body stream already read",
+            );
           isRead = true;
           return JSON.stringify(parsedData);
-        }
+        },
       } as unknown as Response;
-    }
+    },
   } as unknown as Response;
 }
 
@@ -792,7 +814,7 @@ export let apiProviderConfig: ProviderConfig = {
   openRouter: true,
   gemini: true,
   groq: true,
-  deepInfra: true
+  deepInfra: true,
 };
 
 try {
@@ -807,7 +829,10 @@ try {
 export function updateApiProviderConfig(newConfig: Partial<ProviderConfig>) {
   apiProviderConfig = { ...apiProviderConfig, ...newConfig };
   try {
-    localStorage.setItem("henosis_provider_config", JSON.stringify(apiProviderConfig));
+    localStorage.setItem(
+      "henosis_provider_config",
+      JSON.stringify(apiProviderConfig),
+    );
   } catch (e) {}
 }
 
@@ -836,9 +861,12 @@ async function syncProviderToggles() {
         openRouter: data.openRouterEnabled !== false,
         gemini: data.geminiEnabled !== false,
         groq: data.groqEnabled !== false,
-        deepInfra: data.deepInfraEnabled !== false
+        deepInfra: data.deepInfraEnabled !== false,
       });
-      console.log("[apiClient] Automatically synchronized active provider toggles from server:", apiProviderConfig);
+      console.log(
+        "[apiClient] Automatically synchronized active provider toggles from server:",
+        apiProviderConfig,
+      );
     }
   } catch (e) {
     // Silent catch
@@ -848,7 +876,7 @@ async function syncProviderToggles() {
 if (typeof window !== "undefined") {
   setTimeout(syncProviderToggles, 1000);
   setInterval(syncProviderToggles, 30000); // Periodically check for remote API circuit breaker flips from administrator
-  
+
   setTimeout(syncAIPrompts, 1500);
   setInterval(syncAIPrompts, 45000); // Periodically check for remote AI prompts adjustments
 }
@@ -858,7 +886,11 @@ export function parseKeys(prefixes: string[]): string[] {
   const keys: string[] = [];
   try {
     for (const [envKey, envVal] of Object.entries(import.meta.env)) {
-      if (prefixes.some(p => envKey.startsWith(p)) && typeof envVal === 'string' && envVal.trim()) {
+      if (
+        prefixes.some((p) => envKey.startsWith(p)) &&
+        typeof envVal === "string" &&
+        envVal.trim()
+      ) {
         const val = envVal.trim();
         if (!keys.includes(val)) {
           keys.push(val);
@@ -873,7 +905,7 @@ export function parseKeys(prefixes: string[]): string[] {
 
 export interface InterleavedKey {
   key: string;
-  provider: "openRouter" | "gemini" | "groq" | "deepInfra";
+  provider: "openRouter" | "gemini" | "groq" | "deepInfra" | "cerebras";
 }
 
 let globalPoolIndex = 0;
@@ -881,26 +913,36 @@ let globalPoolIndex = 0;
 // ---- ADVANCED KEY COOLDOWN MANAGER ----
 export interface KeyState {
   key: string;
-  provider: "openRouter" | "gemini" | "groq" | "deepInfra";
+  provider: "openRouter" | "gemini" | "groq" | "deepInfra" | "cerebras";
   status: "ACTIVE" | "COOLING" | "DEPLETED";
   cooldownUntil: number;
 }
 
 export const keyRegistry = new Map<string, KeyState>();
 
-async function reportKeyUsageToServer(provider: string, key: string, metric: "usage" | "error", errorText?: string) {
+async function reportKeyUsageToServer(
+  provider: string,
+  key: string,
+  metric: "usage" | "error",
+  errorText?: string,
+) {
   try {
     fetch("/api/admin/report-key-usage", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, key, metric, error: errorText })
+      body: JSON.stringify({ provider, key, metric, error: errorText }),
     }).catch(() => {});
   } catch (err) {
     console.warn("[apiClient] Failed to report key usage to server:", err);
   }
 }
 
-export function handleKeyError(key: string, provider: "openRouter" | "gemini" | "groq" | "deepInfra", status: number, bodyText: string) {
+export function handleKeyError(
+  key: string,
+  provider: "openRouter" | "gemini" | "groq" | "deepInfra",
+  status: number,
+  bodyText: string,
+) {
   let state = keyRegistry.get(key);
   if (!state) {
     state = { key, provider, status: "ACTIVE", cooldownUntil: 0 };
@@ -908,45 +950,63 @@ export function handleKeyError(key: string, provider: "openRouter" | "gemini" | 
   }
 
   // Report error key usage to server
-  reportKeyUsageToServer(provider, key, "error", `Status ${status}: ${bodyText.substring(0, 300)}`);
+  reportKeyUsageToServer(
+    provider,
+    key,
+    "error",
+    `Status ${status}: ${bodyText.substring(0, 300)}`,
+  );
 
   // Pipe raw error to debugger console
-  console.error(`[DEBUGGER] Key failure detected on provider ${provider}. Status code: ${status}. Error body:`, bodyText);
+  console.error(
+    `[DEBUGGER] Key failure detected on provider ${provider}. Status code: ${status}. Error body:`,
+    bodyText,
+  );
 
   const normalizedText = bodyText.toLowerCase();
-  
+
   // Model Not Found (404), Quota/Billing exceeded strings
-  const isDepleted = status === 404 || status === 401 || status === 403 ||
-                     normalizedText.includes("quota, please check your plan") || 
-                     normalizedText.includes("exceeded your current quota") ||
-                     normalizedText.includes("hard quota") ||
-                     normalizedText.includes("billing") ||
-                     normalizedText.includes("credit") ||
-                     normalizedText.includes("limit_exceeded") ||
-                     normalizedText.includes("model not found") ||
-                     normalizedText.includes("not_found") ||
-                     normalizedText.includes("unauthorized") ||
-                     normalizedText.includes("forbidden") ||
-                     normalizedText.includes("invalid api key");
+  const isDepleted =
+    status === 404 ||
+    status === 401 ||
+    status === 403 ||
+    normalizedText.includes("quota, please check your plan") ||
+    normalizedText.includes("exceeded your current quota") ||
+    normalizedText.includes("hard quota") ||
+    normalizedText.includes("billing") ||
+    normalizedText.includes("credit") ||
+    normalizedText.includes("limit_exceeded") ||
+    normalizedText.includes("model not found") ||
+    normalizedText.includes("not_found") ||
+    normalizedText.includes("unauthorized") ||
+    normalizedText.includes("forbidden") ||
+    normalizedText.includes("invalid api key");
 
   // Rate Limiting (429) or Server Error (5xx)
-  const isCooling = status === 429 || 
-                    status >= 500 ||
-                    status === 408 || // Timeout fast fail mapping
-                    normalizedText.includes("rate limit") || 
-                    normalizedText.includes("too many requests") || 
-                    normalizedText.includes("429") ||
-                    normalizedText.includes("requests limit") ||
-                    normalizedText.includes("tps");
+  const isCooling =
+    status === 429 ||
+    status >= 500 ||
+    status === 408 || // Timeout fast fail mapping
+    normalizedText.includes("rate limit") ||
+    normalizedText.includes("too many requests") ||
+    normalizedText.includes("429") ||
+    normalizedText.includes("requests limit") ||
+    normalizedText.includes("tps");
 
   if (isDepleted) {
     state.status = "DEPLETED";
-    state.cooldownUntil = Date.now() + 5 * 60 * 1000; // 5 minutes (300000 ms) quarantine 
-    console.warn(`[Key Cooldown Manager] Key (${provider}) marked DEPLETED for 5m due to status ${status} / quota / auth / model issues.`, key.substring(0, 10) + "...");
+    state.cooldownUntil = Date.now() + 5 * 60 * 1000; // 5 minutes (300000 ms) quarantine
+    console.warn(
+      `[Key Cooldown Manager] Key (${provider}) marked DEPLETED for 5m due to status ${status} / quota / auth / model issues.`,
+      key.substring(0, 10) + "...",
+    );
   } else if (isCooling) {
     state.status = "COOLING";
     state.cooldownUntil = Date.now() + 5 * 60 * 1000; // 5 minutes
-    console.warn(`[Key Cooldown Manager] Key (${provider}) marked COOLING for 5m due to status ${status} / rate limit.`, key.substring(0, 10) + "...");
+    console.warn(
+      `[Key Cooldown Manager] Key (${provider}) marked COOLING for 5m due to status ${status} / rate limit.`,
+      key.substring(0, 10) + "...",
+    );
   }
 }
 
@@ -957,7 +1017,8 @@ export function getInterleavedPool(): InterleavedKey[] {
   const groqKeysRaw: string[] = [];
 
   // Safe process.env accessor to avoid ReferenceError on client environment
-  const safeProcessEnv = (typeof process !== "undefined" && process?.env) ? process.env : {};
+  const safeProcessEnv =
+    typeof process !== "undefined" && process?.env ? process.env : {};
 
   // Clean helper
   const cleanKey = (val: any): string => {
@@ -969,21 +1030,34 @@ export function getInterleavedPool(): InterleavedKey[] {
 
   // Safe literal mapping for Vite production (import.meta.env does not support dynamic indexing)
   const getEnv = (k: string) => {
-    try { 
+    try {
       // Keep process.env lookup for server-side
-      return typeof process !== 'undefined' ? process.env[k] : undefined; 
-    } catch(e) { return undefined; }
+      return typeof process !== "undefined" ? process.env[k] : undefined;
+    } catch (e) {
+      return undefined;
+    }
   };
 
   const getViteEnv = (v: any) => {
-      try { return v; } catch(e) { return undefined; }
-  }
+    try {
+      return v;
+    } catch (e) {
+      return undefined;
+    }
+  };
 
   const geminiEnvKeys = [
-    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_1), getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_2), getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_3),
-    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_4), getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_5), getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_6),
-    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_7), getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_8), getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_9),
-    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_10), getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_11)
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_1),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_2),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_3),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_4),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_5),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_6),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_7),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_8),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_9),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_10),
+    getViteEnv(import.meta.env?.VITE_GEMINI_API_KEY_11),
   ];
 
   // 1. Parse Gemini Keys: process.env.GEMINI_API_KEY_1 to process.env.GEMINI_API_KEY_11
@@ -1009,14 +1083,26 @@ export function getInterleavedPool(): InterleavedKey[] {
   } catch (e) {}
 
   const openRouterEnvKeysApi = [
-    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_1), getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_2), getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_3),
-    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_4), getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_5), getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_6),
-    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_7), getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_8), getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_9)
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_1),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_2),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_3),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_4),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_5),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_6),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_7),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_8),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_API_KEY_9),
   ];
   const openRouterEnvKeys = [
-    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_1), getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_2), getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_3),
-    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_4), getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_5), getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_6),
-    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_7), getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_8), getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_9)
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_1),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_2),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_3),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_4),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_5),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_6),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_7),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_8),
+    getViteEnv(import.meta.env?.VITE_OPENROUTER_KEY_9),
   ];
 
   // 2. Parse OpenRouter Keys: Loop 1 to 9
@@ -1057,14 +1143,24 @@ export function getInterleavedPool(): InterleavedKey[] {
   } catch (e) {}
 
   const deepInfraEnvKeysApi = [
-    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_1), getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_2), getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_3),
-    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_4), getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_5), getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_6),
-    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_7), getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_8)
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_1),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_2),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_3),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_4),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_5),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_6),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_7),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_API_KEY_8),
   ];
   const deepInfraEnvKeys = [
-    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_1), getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_2), getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_3),
-    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_4), getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_5), getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_6),
-    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_7), getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_8)
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_1),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_2),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_3),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_4),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_5),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_6),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_7),
+    getViteEnv(import.meta.env?.VITE_DEEPINFRA_KEY_8),
   ];
 
   // 3. Parse DeepInfra Keys: Loop 1 to 8
@@ -1105,16 +1201,28 @@ export function getInterleavedPool(): InterleavedKey[] {
   } catch (e) {}
 
   const groqEnvKeysApi = [
-    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_1), getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_2), getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_3),
-    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_4), getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_5), getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_6),
-    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_7), getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_8), getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_9),
-    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_10)
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_1),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_2),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_3),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_4),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_5),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_6),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_7),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_8),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_9),
+    getViteEnv(import.meta.env?.VITE_GROQ_API_KEY_10),
   ];
   const groqEnvKeys = [
-    getViteEnv(import.meta.env?.VITE_GROQ_KEY_1), getViteEnv(import.meta.env?.VITE_GROQ_KEY_2), getViteEnv(import.meta.env?.VITE_GROQ_KEY_3),
-    getViteEnv(import.meta.env?.VITE_GROQ_KEY_4), getViteEnv(import.meta.env?.VITE_GROQ_KEY_5), getViteEnv(import.meta.env?.VITE_GROQ_KEY_6),
-    getViteEnv(import.meta.env?.VITE_GROQ_KEY_7), getViteEnv(import.meta.env?.VITE_GROQ_KEY_8), getViteEnv(import.meta.env?.VITE_GROQ_KEY_9),
-    getViteEnv(import.meta.env?.VITE_GROQ_KEY_10)
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_1),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_2),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_3),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_4),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_5),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_6),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_7),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_8),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_9),
+    getViteEnv(import.meta.env?.VITE_GROQ_KEY_10),
   ];
 
   // 4. Parse Groq Keys (Exhibition - DO NOT leak into active loop if empty)
@@ -1151,18 +1259,22 @@ export function getInterleavedPool(): InterleavedKey[] {
   } catch (e) {}
 
   // Ultra-Strict Cleansing (Anti-Undefined and Pattern Filtering)
-  const validOpenRouter = Array.from(new Set(openRouterKeys))
-    .filter(k => k && k.startsWith("sk-or-"));
+  const validOpenRouter = Array.from(new Set(openRouterKeys)).filter(
+    (k) => k && k.startsWith("sk-or-"),
+  );
 
-  const validGemini = Array.from(new Set(geminiKeysRaw))
-    .filter(k => k && k !== "");
+  const validGemini = Array.from(new Set(geminiKeysRaw)).filter(
+    (k) => k && k !== "",
+  );
 
-  const validDeepInfra = Array.from(new Set(deepInfraKeys))
-    .filter(k => k && k !== "");
+  const validDeepInfra = Array.from(new Set(deepInfraKeys)).filter(
+    (k) => k && k !== "",
+  );
 
-  // Filter Groq keys appropriately
-  const validGroq = Array.from(new Set(groqKeysRaw))
-    .filter(k => k && k.startsWith("gsk_"));
+  // Filter Groq keys appropriately (these are actually Cerebras keys now)
+  const validGroq = Array.from(new Set(groqKeysRaw)).filter(
+    (k) => k && k !== "",
+  );
 
   // Switch-OFF Guard: Read current active UI state variables / toggles in real-time
   let isGeminiEnabled = apiProviderConfig.gemini;
@@ -1174,16 +1286,22 @@ export function getInterleavedPool(): InterleavedKey[] {
     const stored = localStorage.getItem("henosis_provider_config");
     if (stored) {
       const storedConfig = JSON.parse(stored);
-      if (storedConfig.gemini !== undefined) isGeminiEnabled = !!storedConfig.gemini;
-      if (storedConfig.openRouter !== undefined) isOpenRouterEnabled = !!storedConfig.openRouter;
-      if (storedConfig.deepInfra !== undefined) isDeepInfraEnabled = !!storedConfig.deepInfra;
+      if (storedConfig.gemini !== undefined)
+        isGeminiEnabled = !!storedConfig.gemini;
+      if (storedConfig.openRouter !== undefined)
+        isOpenRouterEnabled = !!storedConfig.openRouter;
+      if (storedConfig.deepInfra !== undefined)
+        isDeepInfraEnabled = !!storedConfig.deepInfra;
       if (storedConfig.groq !== undefined) isGroqEnabled = !!storedConfig.groq;
     }
   } catch (e) {
     // ignore parsing errors
   }
 
-  const lists: { provider: "openRouter" | "gemini" | "groq" | "deepInfra"; keys: string[] }[] = [];
+  const lists: {
+    provider: "openRouter" | "gemini" | "groq" | "deepInfra" | "cerebras";
+    keys: string[];
+  }[] = [];
 
   if (isOpenRouterEnabled && validOpenRouter.length > 0) {
     lists.push({ provider: "openRouter", keys: validOpenRouter });
@@ -1202,29 +1320,31 @@ export function getInterleavedPool(): InterleavedKey[] {
 
   // Cross-Provider Interleaved Round-Robin Matrix
   const interleavedPool: InterleavedKey[] = [];
-  const maxLen = Math.max(...lists.map(list => list.keys.length));
+  const maxLen = Math.max(...lists.map((list) => list.keys.length));
 
   for (let i = 0; i < maxLen; i++) {
     for (const list of lists) {
       if (i < list.keys.length) {
         interleavedPool.push({
           key: list.keys[i],
-          provider: list.provider
+          provider: list.provider,
         });
       }
     }
   }
 
   // KEY FILTERING MANDATE: picker MUST only yield active keys where Date.now() > cooldownUntil and status is not DEPLETED
-  const cleanInterleavedPool = interleavedPool.filter(item => {
-    if (!item || !item.key || typeof item.key !== 'string') return false;
+  const cleanInterleavedPool = interleavedPool.filter((item) => {
+    if (!item || !item.key || typeof item.key !== "string") return false;
     const trimKey = item.key.trim();
-    if (trimKey === "" || trimKey === "undefined" || trimKey === "null") return false;
-    if (item.provider === "openRouter" && !trimKey.startsWith("sk-or-")) return false;
+    if (trimKey === "" || trimKey === "undefined" || trimKey === "null")
+      return false;
+    if (item.provider === "openRouter" && !trimKey.startsWith("sk-or-"))
+      return false;
     return true;
   });
 
-  return cleanInterleavedPool.filter(item => {
+  return cleanInterleavedPool.filter((item) => {
     const state = keyRegistry.get(item.key);
     if (!state) return true;
     if (state.status === "DEPLETED") return false;
@@ -1233,271 +1353,319 @@ export function getInterleavedPool(): InterleavedKey[] {
 }
 
 // Direct Call implementations using raw provider HTTP Endpoints bypasses server proxies
-async function fetchOpenRouterDirect(apiKey: string, model: string, messages: any[], isJsonExpected: boolean): Promise<string> {
+async function fetchOpenRouterDirect(
+  apiKey: string,
+  model: string,
+  messages: any[],
+  isJsonExpected: boolean,
+): Promise<string> {
   const modelsToTry = [
-    (model && model !== "openai/gpt-oss-120b") ? model : "google/gemini-2.5-flash",
+    model && model !== "openai/gpt-oss-120b"
+      ? model
+      : "google/gemini-2.5-flash",
     "meta-llama/llama-3.1-8b-instruct:free",
     "openai/gpt-oss-120b:free",
-    "meta-llama/llama-3-8b-instruct:free"
+    "meta-llama/llama-3-8b-instruct:free",
   ];
-
   let lastError: any = null;
-
   for (const currentModel of modelsToTry) {
     const bodyObj: any = {
       model: currentModel,
       messages,
       temperature: 0.1,
-      max_tokens: 4096
+      max_tokens: 4096,
     };
-    
-    if (isJsonExpected) {
-      bodyObj.response_format = { type: "json_object" };
-    }
-
+    if (isJsonExpected) bodyObj.response_format = { type: "json_object" };
     try {
-      console.log(`[apiClient OpenRouter Direct] Attempting completions using model: ${currentModel}`);
-      const response = await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-          "HTTP-Referer": "https://henosisweb.vercel.app",
-          "X-Title": "Henosis Learning App"
+      const response = await fetchWithTimeout(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(bodyObj),
         },
-        body: JSON.stringify(bodyObj)
-      }, 45000);
-
+        45000,
+      );
       if (!response.ok) {
         const errText = await response.text();
-        console.warn(`[apiClient OpenRouter Direct] Model ${currentModel} failed with status ${response.status}: ${errText}`);
-        lastError = new Error(`OpenRouter API Error: ${response.status} - ${errText}`);
-        
-        if (response.status === 400 || errText.toLowerCase().includes("model not found") || errText.toLowerCase().includes("unavailable")) {
-          // Model error or deprecated, step down to next model
+        lastError = new Error(
+          `OpenRouter API Error: ${response.status} - ${errText}`,
+        );
+        if (
+          response.status === 400 ||
+          errText.toLowerCase().includes("model not found") ||
+          errText.toLowerCase().includes("unavailable")
+        )
           continue;
-        }
-
         handleKeyError(apiKey, "openRouter", response.status, errText);
-        const isSilent = [402, 403, 404, 429].includes(response.status) || 
-                         errText.toLowerCase().includes("unavailable for free") || 
-                         errText.toLowerCase().includes("paid version") ||
-                         errText.toLowerCase().includes("paid version only") ||
-                         errText.toLowerCase().includes("model not found");
-                         
-        if (isSilent) {
-          throw new Error("PROVIDER_SILENT_FAIL");
-        }
+        const isSilent =
+          [402, 403, 404, 429].includes(response.status) ||
+          errText.toLowerCase().includes("unavailable for free") ||
+          errText.toLowerCase().includes("paid version") ||
+          errText.toLowerCase().includes("model not found");
+        if (isSilent) throw new Error("PROVIDER_SILENT_FAIL");
         throw lastError;
       }
-
       const data = await response.json();
       const content = data?.choices?.[0]?.message?.content;
-      if (!content) throw new Error("Empty content returned from OpenRouter direct endpoint.");
+      if (!content) throw new Error("Empty content returned from OpenRouter.");
       return content;
     } catch (err: any) {
-      if (err.message === "PROVIDER_SILENT_FAIL") {
-        throw err;
-      }
+      if (err.message === "PROVIDER_SILENT_FAIL") throw err;
       lastError = err;
-      const errString = err.message || "";
-      if (errString.includes("400") || errString.toLowerCase().includes("model")) {
+      if (
+        err.message &&
+        (err.message.includes("400") ||
+          err.message.toLowerCase().includes("model"))
+      )
         continue;
-      }
-      
-      const isSilent = errString.toLowerCase().includes("unavailable for free") || 
-                       errString.toLowerCase().includes("paid version") ||
-                       errString.toLowerCase().includes("paid version only") ||
-                       errString.toLowerCase().includes("model not found") ||
-                       errString.toLowerCase().includes("403") ||
-                       errString.toLowerCase().includes("404");
-                       
-      if (isSilent) {
-        console.warn("OpenRouter slot failed, bypassing...");
-        throw new Error("PROVIDER_SILENT_FAIL");
-      }
-
-      if (err.message && !err.message.includes("OpenRouter Direct failure") && !err.message.includes("OpenRouter API Error")) {
+      const isSilent =
+        err.message &&
+        (err.message.toLowerCase().includes("unavailable for free") ||
+          err.message.toLowerCase().includes("paid version") ||
+          err.message.toLowerCase().includes("model not found") ||
+          err.message.toLowerCase().includes("403") ||
+          err.message.toLowerCase().includes("404"));
+      if (isSilent) throw new Error("PROVIDER_SILENT_FAIL");
+      if (err.message && !err.message.includes("OpenRouter API Error"))
         handleKeyError(apiKey, "openRouter", 0, err.message || "");
-      }
       throw err;
     }
   }
-
   throw lastError || new Error("All fallback models on OpenRouter failed.");
 }
 
-async function fetchGeminiDirect(apiKey: string, messages: any[], isJsonExpected: boolean): Promise<string> {
+async function fetchGeminiDirect(
+  apiKey: string,
+  messages: any[],
+  isJsonExpected: boolean,
+): Promise<string> {
   const contents: any[] = [];
   let systemInstructionText = "";
-
   for (const msg of messages) {
     if (msg.role === "system") {
-      systemInstructionText += (systemInstructionText ? "\n" : "") + msg.content;
+      systemInstructionText +=
+        (systemInstructionText ? "\n" : "") + msg.content;
     } else {
       contents.push({
         role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }]
+        parts: [{ text: msg.content }],
       });
     }
   }
-
   const payload: any = {
     contents,
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 4096 // Force-set to 4096
-    }
+    generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
   };
-
-  if (isJsonExpected) {
+  if (isJsonExpected)
     payload.generationConfig.responseMimeType = "application/json";
-  }
-
-  if (systemInstructionText) {
-    payload.systemInstruction = {
-      parts: [{ text: systemInstructionText }]
-    };
-  }
-
+  if (systemInstructionText)
+    payload.systemInstruction = { parts: [{ text: systemInstructionText }] };
   try {
-    const model = "gemini-2.5-flash"; // stable, efficient flash model
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-    const response = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const response = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload)
-    }, 45000);
-
+      45000,
+    );
     if (!response.ok) {
       const errText = await response.text();
       handleKeyError(apiKey, "gemini", response.status, errText);
       throw new Error(`Gemini Direct failure: ${response.status} - ${errText}`);
     }
-
     const data = await response.json();
     const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!content) throw new Error("Empty content returned from Gemini direct endpoint.");
+    if (!content)
+      throw new Error("Empty content returned from Gemini direct endpoint.");
     return content;
   } catch (err: any) {
     if (err.name === "AbortError") {
-      handleKeyError(apiKey, "gemini", 408, "Request Timeout 45s");
-      throw new Error("Request Timeout 45s on Gemini Direct");
+      handleKeyError(apiKey, "gemini", 408, "Timeout");
+      throw new Error("Timeout on Gemini");
     }
-    if (err.message && !err.message.includes("Gemini Direct failure")) {
+    if (err.message && !err.message.includes("Gemini Direct failure"))
       handleKeyError(apiKey, "gemini", 0, err.message || "");
-    }
     throw err;
   }
 }
 
-async function fetchGroqDirect(apiKey: string, messages: any[], isJsonExpected: boolean): Promise<string> {
+async function fetchDeepInfraDirect(
+  apiKey: string,
+  messages: any[],
+  isJsonExpected: boolean,
+): Promise<string> {
+  const bodyObj: any = {
+    model: "microsoft/Phi-3-mini-4k-instruct",
+    messages,
+    temperature: 0.1,
+    max_tokens: 4096,
+  };
+  if (isJsonExpected) bodyObj.response_format = { type: "json_object" };
+  try {
+    const response = await fetchWithTimeout(
+      "https://api.deepinfra.com/v1/openai/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(bodyObj),
+      },
+      45000,
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      handleKeyError(apiKey, "deepInfra", response.status, errText);
+      throw new Error(
+        `DeepInfra Direct failure: ${response.status} - ${errText}`,
+      );
+    }
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty content from DeepInfra.");
+    return content;
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      handleKeyError(apiKey, "deepInfra", 408, "Timeout");
+      throw new Error("Timeout on DeepInfra");
+    }
+    if (err.message && !err.message.includes("DeepInfra Direct failure"))
+      handleKeyError(apiKey, "deepInfra", 0, err.message || "");
+    throw err;
+  }
+}
+
+async function fetchGroqDirect(
+  apiKey: string,
+  messages: any[],
+  isJsonExpected: boolean,
+): Promise<string> {
   const bodyObj: any = {
     model: "llama3-8b-8192",
     messages,
     temperature: 0.1,
-    max_tokens: 4096 // Force-set to 4096
+    max_tokens: 4096,
   };
-  
-  if (isJsonExpected) {
-    bodyObj.response_format = { type: "json_object" };
-  }
-
+  if (isJsonExpected) bodyObj.response_format = { type: "json_object" };
   try {
-    const response = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
+    const response = await fetchWithTimeout(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(bodyObj),
       },
-      body: JSON.stringify(bodyObj)
-    }, 45000);
-
+      45000,
+    );
     if (!response.ok) {
       const errText = await response.text();
       handleKeyError(apiKey, "groq", response.status, errText);
       throw new Error(`Groq Direct failure: ${response.status} - ${errText}`);
     }
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty content from Groq.");
+    return content;
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      handleKeyError(apiKey, "groq", 408, "Timeout");
+      throw new Error("Timeout on Groq");
+    }
+    if (err.message && !err.message.includes("Groq Direct failure"))
+      handleKeyError(apiKey, "groq", 0, err.message || "");
+    throw err;
+  }
+}
+
+async function fetchCerebrasDirect(
+  apiKey: string,
+  messages: any[],
+  isJsonExpected: boolean,
+): Promise<string> {
+  const bodyObj: any = {
+    model: "gpt-oss-120b",
+    messages,
+    temperature: 0.1,
+    max_tokens: 4096,
+  };
+
+  if (isJsonExpected) {
+    bodyObj.response_format = { type: "json_object" };
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      "https://api.cerebras.ai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(bodyObj),
+      },
+      45000,
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      handleKeyError(apiKey, "groq", response.status, errText); // Keep error logging backward-compatible
+      throw new Error(
+        `Cerebras Direct failure: ${response.status} - ${errText}`,
+      );
+    }
 
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("Empty content returned from Groq direct endpoint.");
+    if (!content)
+      throw new Error("Empty content returned from Cerebras direct endpoint.");
     return content;
   } catch (err: any) {
     if (err.name === "AbortError") {
       handleKeyError(apiKey, "groq", 408, "Request Timeout 45s");
-      throw new Error("Request Timeout 45s on Groq Direct");
+      throw new Error("Request Timeout 45s on Cerebras Direct");
     }
-    if (err.message && !err.message.includes("Groq Direct failure")) {
+    if (err.message && !err.message.includes("Cerebras Direct failure")) {
       handleKeyError(apiKey, "groq", 0, err.message || "");
     }
     throw err;
   }
 }
 
-async function fetchDeepInfraDirect(apiKey: string, messages: any[], isJsonExpected: boolean): Promise<string> {
-  const bodyObj: any = {
-    model: "microsoft/Phi-3-mini-4k-instruct", // Strictly updated to the 100% serverless free model of DeepInfra for $0 tier
-    messages,
-    temperature: 0.1,
-    max_tokens: 4096 // Force-set to 4096
-  };
-  
-  if (isJsonExpected) {
-    bodyObj.response_format = { type: "json_object" };
-  }
+let globalFetchLock = Promise.resolve();
 
-  try {
-    const response = await fetchWithTimeout("https://api.deepinfra.com/v1/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(bodyObj)
-    }, 45000);
-
-    if (!response.ok) {
-      const errText = await response.text();
-      handleKeyError(apiKey, "deepInfra", response.status, errText);
-      throw new Error(`DeepInfra Direct failure: ${response.status} - ${errText}`);
-    }
-
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("Empty content returned from DeepInfra direct endpoint.");
-    return content;
-  } catch (err: any) {
-    if (err.name === "AbortError") {
-      handleKeyError(apiKey, "deepInfra", 408, "Request Timeout 45s");
-      throw new Error("Request Timeout 45s on DeepInfra Direct");
-    }
-    if (err.message && !err.message.includes("DeepInfra Direct failure")) {
-      handleKeyError(apiKey, "deepInfra", 0, err.message || "");
-    }
-    throw err;
-  }
-}
-
-async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestInit): Promise<Response> {
+async function executeFetchWithBackoffAndEvasion(
+  url: string,
+  options?: RequestInit,
+): Promise<Response> {
   let currentOptions = options ? { ...options } : {};
   let providerType: "primary" | "backup" = "primary";
 
   // Check if AI requested of standard parsed routes
-  const isAiRequest = INTERCEPTED_AI_ROUTES.some(route => url.includes(route));
+  const isAiRequest = INTERCEPTED_AI_ROUTES.some((route) =>
+    url.includes(route),
+  );
 
   const writeCache = async (res: Response, urlKey: string, bodyObj: any) => {
     try {
-      if (typeof navigator !== 'undefined') {
-         const cacheKey = `ai_cache_${urlKey}_${JSON.stringify(bodyObj)}`;
-         const cloned = res.clone();
-         const data = await cloned.json();
-         await localforage.setItem(cacheKey, data);
+      if (typeof navigator !== "undefined") {
+        const cacheKey = `ai_cache_${urlKey}_${JSON.stringify(bodyObj)}`;
+        const cloned = res.clone();
+        const data = await cloned.json();
+        await localforage.setItem(cacheKey, data);
       }
-    } catch(e) {
+    } catch (e) {
       console.warn("Storage sync failed", e);
     }
   };
@@ -1508,24 +1676,32 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
       try {
         parsedBody = JSON.parse(currentOptions.body as string);
       } catch (e) {
-        console.warn("[apiClient Dynamic Rotation] Failed to parse request body as JSON:", e);
+        console.warn(
+          "[apiClient Dynamic Rotation] Failed to parse request body as JSON:",
+          e,
+        );
       }
     }
 
     // 🌍 OFFLINE FALLBACK - IndexedDB Write-Through Retrieval
     const cacheKey = `ai_cache_${url}_${JSON.stringify(parsedBody)}`;
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
       try {
         const cachedContent = await localforage.getItem(cacheKey);
         if (cachedContent) {
-          console.warn("[apiClient Offline] Seamless fallback: Loaded previously fetched state from IndexedDB.", cacheKey);
+          console.warn(
+            "[apiClient Offline] Seamless fallback: Loaded previously fetched state from IndexedDB.",
+            cacheKey,
+          );
           return new Response(JSON.stringify(cachedContent), {
             status: 200,
-            headers: { 'Content-Type': 'application/json' }
+            headers: { "Content-Type": "application/json" },
           });
         } else {
           // Pass down to UI so UI can render fallback skeleton
-          throw new Error("Mạng đang ngoại tuyến và không tìm thấy nội dung phản hồi trong bộ nhớ tạm mượt mà IndexedDB.");
+          throw new Error(
+            "Mạng đang ngoại tuyến và không tìm thấy nội dung phản hồi trong bộ nhớ tạm mượt mà IndexedDB.",
+          );
         }
       } catch (e) {
         console.error("LocalForage fallback read error:", e);
@@ -1534,24 +1710,70 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
     }
 
     const { model, messages } = await buildGroqPayload(url, parsedBody);
-    const isJsonExpected = url.includes("lesson-plan") || 
-                           url.includes("process-chunk") || 
-                           url.includes("convert-document-chunk") || 
-                           url.includes("hydrate-card") || 
-                           url.includes("validate-json") || 
-                           url.includes("generate");
+    const isJsonExpected =
+      url.includes("lesson-plan") ||
+      url.includes("process-chunk") ||
+      url.includes("convert-document-chunk") ||
+      url.includes("hydrate-card") ||
+      url.includes("validate-json") ||
+      url.includes("generate");
+
+    const isUnitedEngine =
+      url.includes("process-chunk") ||
+      url.includes("convert-document-chunk") ||
+      url.includes("hydrate-card") ||
+      url.includes("validate-json");
 
     let attempts = 0;
     // Max attempts should be at least length of the pool, up to 15, to ensure we cycle through all available keys
     let pool = getInterleavedPool();
-    const maxAttempts = Math.min(Math.max(5, pool.length), 15); 
+    if (!isUnitedEngine) {
+      pool = pool.filter(
+        (p) => p.provider === "groq" || p.provider === "cerebras",
+      );
+    } else {
+      pool = pool.filter(
+        (p) =>
+          p.provider === "groq" ||
+          p.provider === "cerebras" ||
+          p.provider === "gemini",
+      );
+    }
+
+    const maxAttempts = Math.min(Math.max(5, pool.length), 15);
     let lastRotationError: any = null;
 
     while (attempts < maxAttempts) {
-      const pool = getInterleavedPool(); // Fresh pool check prevents choosing cooled down keys
+      let pool = getInterleavedPool(); // Fresh pool check prevents choosing cooled down keys
+      if (!isUnitedEngine) {
+        pool = pool.filter(
+          (p) => p.provider === "groq" || p.provider === "cerebras",
+        );
+      } else {
+        pool = pool.filter(
+          (p) =>
+            p.provider === "groq" ||
+            p.provider === "cerebras" ||
+            p.provider === "gemini",
+        );
+      }
       if (pool.length === 0) {
-        console.warn("[apiClient Rotation] Interleaved pool is completely exhausted or filtered out.");
+        console.warn(
+          "[apiClient Rotation] Interleaved pool is completely exhausted or filtered out.",
+        );
         break;
+      }
+
+      // DELAY GIỮA CÁC LẦN FETCH BẰNG GLOBAL QUEUE LOCK (đảm bảo serialize request, không spam song song)
+      if (isUnitedEngine) {
+        await globalFetchLock;
+        let releaseLock: () => void = () => {};
+        globalFetchLock = new Promise((resolve) => {
+          releaseLock = resolve;
+        });
+        setTimeout(releaseLock, 700); // 700ms cứng giữa mọi fetch của united engine
+      } else if (attempts > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
       }
 
       let currIndex = globalPoolIndex;
@@ -1559,8 +1781,17 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
       let skipCount = 0;
 
       // Safe Pointer Advancement: Skip invalid or empty slots immediately without triggering an API call
-      while ((!item || !item.key || typeof item.key !== "string" || item.key.trim() === "" || item.key === "undefined" || item.key === "null" ||
-             (item.provider === "openRouter" && !item.key.trim().startsWith("sk-or-"))) && skipCount < pool.length) {
+      while (
+        (!item ||
+          !item.key ||
+          typeof item.key !== "string" ||
+          item.key.trim() === "" ||
+          item.key === "undefined" ||
+          item.key === "null" ||
+          (item.provider === "openRouter" &&
+            !item.key.trim().startsWith("sk-or-"))) &&
+        skipCount < pool.length
+      ) {
         console.warn("Skipping invalid key slot");
         currIndex++;
         globalPoolIndex = currIndex;
@@ -1568,44 +1799,73 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
         skipCount++;
       }
 
-      if (!item || !item.key || typeof item.key !== "string" || item.key.trim() === "" || item.key === "undefined" || item.key === "null" ||
-          (item.provider === "openRouter" && !item.key.trim().startsWith("sk-or-"))) {
-        console.warn("[apiClient Rotation] Scanned entire pool, no valid keys remaining.");
+      if (
+        !item ||
+        !item.key ||
+        typeof item.key !== "string" ||
+        item.key.trim() === "" ||
+        item.key === "undefined" ||
+        item.key === "null" ||
+        (item.provider === "openRouter" &&
+          !item.key.trim().startsWith("sk-or-"))
+      ) {
+        console.warn(
+          "[apiClient Rotation] Scanned entire pool, no valid keys remaining.",
+        );
         break;
       }
 
       attempts++;
-      console.log(`[apiClient Rotation] [Attempt ${attempts}/${maxAttempts}] Dispatching via provider: ${item.provider} | Global Key Index: ${globalPoolIndex}`);
+      console.log(
+        `[apiClient Rotation] [Attempt ${attempts}/${maxAttempts}] Dispatching via provider: ${item.provider} | Global Key Index: ${globalPoolIndex}`,
+      );
 
       try {
         let content = "";
-        if (item.provider === "openRouter") {
-          content = await fetchOpenRouterDirect(item.key, model, messages, isJsonExpected);
+        if (item.provider === "cerebras" || item.provider === "groq") {
+          content = await fetchCerebrasDirect(
+            item.key,
+            messages,
+            isJsonExpected,
+          );
+        } else if (item.provider === "openRouter") {
+          content = await fetchOpenRouterDirect(
+            item.key,
+            model,
+            messages,
+            isJsonExpected,
+          );
         } else if (item.provider === "gemini") {
           content = await fetchGeminiDirect(item.key, messages, isJsonExpected);
-        } else if (item.provider === "groq") {
-          content = await fetchGroqDirect(item.key, messages, isJsonExpected);
         } else if (item.provider === "deepInfra") {
-          content = await fetchDeepInfraDirect(item.key, messages, isJsonExpected);
+          content = await fetchDeepInfraDirect(
+            item.key,
+            messages,
+            isJsonExpected,
+          );
         }
 
         if (content) {
-          console.log(`[apiClient Rotation] Successfully completed request via rotated ${item.provider} on attempt ${attempts}!`);
-          
+          console.log(
+            `[apiClient Rotation] Successfully completed request via rotated ${item.provider} on attempt ${attempts}!`,
+          );
+
           // Report successful key usage to server in background
           reportKeyUsageToServer(item.provider, item.key, "usage");
-          
+
           const mappedRes = await mapOpenRouterResponse(url, content);
           globalPoolIndex++; // safe advancement after success
-          
+
           // Write to IndexedDB mirror
           writeCache(mappedRes, url, parsedBody);
           return mappedRes;
         }
       } catch (err: any) {
         console.warn("Skipping invalid key slot");
-        console.warn(`[apiClient Rotation] Rotation failure on provider ${item.provider} on attempt ${attempts}. Error: ${err.message || err}. Incrementing pointer immediately.`);
-        
+        console.warn(
+          `[apiClient Rotation] Rotation failure on provider ${item.provider} on attempt ${attempts}. Error: ${err.message || err}. Incrementing pointer immediately.`,
+        );
+
         // During rotation, we do NOT dispatch user-facing popups/toasts for individual key errors because we are cycling through alternatives
         // the final request will be fallback proxy or raise an actual fetch error if everything completely fails.
         // This stops multiple red "Lỗi Hệ Thống" popups from covering the user's screen.
@@ -1615,86 +1875,90 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
         lastRotationError = err;
 
         // "and retry the chunk processing immediately" -> very small delay to avoid extreme tight infinite CPU loops, but essentially immediate retry
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
 
-    console.warn(`[apiClient Rotation] Direct interleaved keys exhausted. Falling back to backend server-side handlers...`, lastRotationError);
+    console.warn(
+      `[apiClient Rotation] Direct interleaved keys exhausted. Falling back to backend server-side handlers...`,
+      lastRotationError,
+    );
 
-    // Server-side fallback proxy try (Original flow)
-    if (apiProviderConfig && apiProviderConfig.openRouter) {
-      try {
-        console.log(`[apiClient Server Fallback] Attempting backend server proxy route as dual backup...`);
-        const content = await fetchOpenRouterWithBackoff(model, messages, 1, 500);
-        const mappedRes = await mapOpenRouterResponse(url, content);
-        
-        // Write to IndexedDB mirror
-        writeCache(mappedRes, url, parsedBody);
-        return mappedRes;
-      } catch (err: any) {
-        console.warn(`[apiClient Server Fallback] Backend server fallback failed: ${err.message || err}.`);
-      }
-    }
-    
+    // Server-side fallback proxy has been removed since OpenRouter is no longer used.
+
     // Instead of failing fast here, we let the request continue to the regular Vercel/Express backend!
     console.warn("[apiClient Rotation] Falling back to primary backend route.");
   }
 
   // 🌍 OFFLINE FALLBACK - Non-AI Standard API Requests
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-     const cacheKey = `std_cache_${url}`;
-     try {
-       const cachedContent = await localforage.getItem(cacheKey);
-       if (cachedContent) {
-          console.warn("[apiClient Offline] Seamless fallback: Loaded standard API request from IndexedDB.", cacheKey);
-          return new Response(JSON.stringify(cachedContent), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          });
-       }
-     } catch(e) {}
-     throw new Error("Mạng đang ngoại tuyến và không tìm thấy bộ đệm thay thế IndexedDB chuẩn.");
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    const cacheKey = `std_cache_${url}`;
+    try {
+      const cachedContent = await localforage.getItem(cacheKey);
+      if (cachedContent) {
+        console.warn(
+          "[apiClient Offline] Seamless fallback: Loaded standard API request from IndexedDB.",
+          cacheKey,
+        );
+        return new Response(JSON.stringify(cachedContent), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    } catch (e) {}
+    throw new Error(
+      "Mạng đang ngoại tuyến và không tìm thấy bộ đệm thay thế IndexedDB chuẩn.",
+    );
   }
 
   let attempt = 0;
   const maxAttempts = 5; // Enhanced to 5 max attempts with exponential backoff
 
   // Pick a random proxy Sim node
-  let activeProxies = PROXIES.filter(p => p.active);
+  let activeProxies = PROXIES.filter((p) => p.active);
   if (activeProxies.length === 0) {
     // Reset if all died
-    PROXIES.forEach(p => p.active = true);
+    PROXIES.forEach((p) => (p.active = true));
     activeProxies = PROXIES;
   }
-  let currentProxy = activeProxies[Math.floor(Math.random() * activeProxies.length)];
+  let currentProxy =
+    activeProxies[Math.floor(Math.random() * activeProxies.length)];
 
   while (attempt < maxAttempts) {
     attempt++;
     const controller = new AbortController();
-    
+
     // Set response deadline with a generous timeout to allow large text/doc completions
     // Force set Timeout duration to 45000ms (45 seconds) as requested to cycle unresponsive keys early
     const timeoutDuration = 45000;
     const timeoutId = setTimeout(() => {
-      console.warn(`[apiClient Log] Yêu cầu tới ${url} bị quá thời gian phản hồi (timeout ${timeoutDuration / 1000}s). Đang tự động huỷ bỏ và phát tín hiệu thử lại.`);
+      console.warn(
+        `[apiClient Log] Yêu cầu tới ${url} bị quá thời gian phản hồi (timeout ${timeoutDuration / 1000}s). Đang tự động huỷ bỏ và phát tín hiệu thử lại.`,
+      );
       controller.abort();
     }, timeoutDuration);
 
     // Apply Random Jitter Delay to disrupt predictable bots activity
     const jitter = 2000 + Math.random() * 1500;
     if (attempt > 1) {
-      console.log(`[apiClient Log] [Jitter Delay] Đang nghỉ ngơi ngẫu nhiên ${jitter.toFixed(0)}ms để tránh bị hệ thống quét chặn...`);
-      await new Promise(r => setTimeout(r, jitter));
+      console.log(
+        `[apiClient Log] [Jitter Delay] Đang nghỉ ngơi ngẫu nhiên ${jitter.toFixed(0)}ms để tránh bị hệ thống quét chặn...`,
+      );
+      await new Promise((r) => setTimeout(r, jitter));
     }
 
     try {
       // 1. Forge realistic Headers & Spoofing Information
-      const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+      const userAgent =
+        USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
       const randomIP = generateRandomIP();
-      const acceptLanguage = ACCEPT_LANGUAGES[Math.floor(Math.random() * ACCEPT_LANGUAGES.length)];
+      const acceptLanguage =
+        ACCEPT_LANGUAGES[Math.floor(Math.random() * ACCEPT_LANGUAGES.length)];
 
-      const originalHeaders = currentOptions.headers ? { ...currentOptions.headers } : {};
-      
+      const originalHeaders = currentOptions.headers
+        ? { ...currentOptions.headers }
+        : {};
+
       // Inject sophisticated spoofing identity headers
       const evasionHeaders: Record<string, string> = {
         "User-Agent": userAgent,
@@ -1703,51 +1967,67 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
         "CF-Connecting-IP": randomIP,
         "Accept-Language": acceptLanguage,
         "X-Proxy-Simulated-Node": currentProxy ? currentProxy.url : "direct",
-        "X-Request-Jitter-Ms": jitter.toFixed(0)
+        "X-Request-Jitter-Ms": jitter.toFixed(0),
       };
 
       // Merge spoofed headers with original headers while maintaining token credentials
       const mergedHeaders = {
         ...originalHeaders,
-        ...evasionHeaders
+        ...evasionHeaders,
       };
 
       const fetchOptions: RequestInit = {
         ...currentOptions,
         headers: mergedHeaders,
-        signal: controller.signal
+        signal: controller.signal,
       };
 
-      console.log(`[apiClient Log] Gửi yêu cầu đến ${url} | Lần thử ${attempt}/${maxAttempts}`);
-      console.log(`[apiClient Spoof Log] IP giả lập: ${randomIP} | Node Proxy: ${currentProxy ? currentProxy.region : "Direct"} | UA: ${userAgent.substring(0, 45)}...`);
+      console.log(
+        `[apiClient Log] Gửi yêu cầu đến ${url} | Lần thử ${attempt}/${maxAttempts}`,
+      );
+      console.log(
+        `[apiClient Spoof Log] IP giả lập: ${randomIP} | Node Proxy: ${currentProxy ? currentProxy.region : "Direct"} | UA: ${userAgent.substring(0, 45)}...`,
+      );
 
       const response = await fetch(url, fetchOptions);
       clearTimeout(timeoutId);
 
       if (response.ok) {
         resetCircuitBreaker();
-        
+
         // Write standard cache asynchronously
         try {
-          if (typeof navigator !== 'undefined') {
-             const cacheKey = `std_cache_${url}`;
-             const cloned = response.clone();
-             cloned.json().then(data => {
+          if (typeof navigator !== "undefined") {
+            const cacheKey = `std_cache_${url}`;
+            const cloned = response.clone();
+            cloned
+              .json()
+              .then((data) => {
                 localforage.setItem(cacheKey, data).catch(console.warn);
-             }).catch(() => {}); // ignore parsing errors for non-json
+              })
+              .catch(() => {}); // ignore parsing errors for non-json
           }
-        } catch(e) {}
-        
+        } catch (e) {}
+
         return response;
       }
 
       // Handle 429 Rate limits, 408 Timeout or 503/504 Server overloaded
-      if (response.status === 429 || response.status === 408 || response.status === 503 || response.status === 504) {
-        console.warn(`[apiClient Log] Server phản hồi lỗi bận/quá tải (${response.status}) tại node proxy: ${currentProxy ? currentProxy.region : "Direct"}`);
-        
+      if (
+        response.status === 429 ||
+        response.status === 408 ||
+        response.status === 503 ||
+        response.status === 504
+      ) {
+        console.warn(
+          `[apiClient Log] Server phản hồi lỗi bận/quá tải (${response.status}) tại node proxy: ${currentProxy ? currentProxy.region : "Direct"}`,
+        );
+
         // Remove dead proxy or flag as rate-limited from pool to change route in next attempts
         if (currentProxy) {
-          console.warn(`[apiClient Proxy Evasion] Loại bỏ proxy ${currentProxy.region} ra khỏi danh sách chạy hiện tại do dính lỗi Rate Limit / Quá Tải.`);
+          console.warn(
+            `[apiClient Proxy Evasion] Loại bỏ proxy ${currentProxy.region} ra khỏi danh sách chạy hiện tại do dính lỗi Rate Limit / Quá Tải.`,
+          );
           currentProxy.active = false;
         }
 
@@ -1759,24 +2039,34 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
               bodyParsed.provider = "backup";
               currentOptions.body = JSON.stringify(bodyParsed);
               providerType = "backup";
-              console.warn(`[apiClient Log] Phát hiện lỗi giới hạn hạn ngạch hoặc Rate Limit. Tự động chuyển đổi sang Provider Dự Phòng lớp dưới (backup).`);
+              console.warn(
+                `[apiClient Log] Phát hiện lỗi giới hạn hạn ngạch hoặc Rate Limit. Tự động chuyển đổi sang Provider Dự Phòng lớp dưới (backup).`,
+              );
             } catch (e) {
               // Ignore parse errors for raw attachments
             }
           }
 
           // Pick a next fresh proxy sim node for the retry
-          const remActive = PROXIES.filter(p => p.active);
-          currentProxy = remActive.length > 0 ? remActive[Math.floor(Math.random() * remActive.length)] : PROXIES[Math.floor(Math.random() * PROXIES.length)];
+          const remActive = PROXIES.filter((p) => p.active);
+          currentProxy =
+            remActive.length > 0
+              ? remActive[Math.floor(Math.random() * remActive.length)]
+              : PROXIES[Math.floor(Math.random() * PROXIES.length)];
 
           // Apply robust Exponential Backoff Delay
-          const backoffDelay = Math.pow(2.5, attempt) * 1000 + Math.random() * 1000;
-          console.log(`[apiClient Log] Đang kích hoạt Backoff trong ${backoffDelay.toFixed(0)}ms trước khi thử lại với proxy và danh tính mới...`);
+          const backoffDelay =
+            Math.pow(2.5, attempt) * 1000 + Math.random() * 1000;
+          console.log(
+            `[apiClient Log] Đang kích hoạt Backoff trong ${backoffDelay.toFixed(0)}ms trước khi thử lại với proxy và danh tính mới...`,
+          );
           await new Promise((r) => setTimeout(r, backoffDelay));
           continue;
         } else {
           handleFailure();
-          throw new Error(`Đã đạt giới hạn tối đa lần thử lại. Server trạng thái lỗi: ${response.status}`);
+          throw new Error(
+            `Đã đạt giới hạn tối đa lần thử lại. Server trạng thái lỗi: ${response.status}`,
+          );
         }
       }
 
@@ -1787,17 +2077,22 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
           const clonedResponse = response.clone();
           errorData = await clonedResponse.json();
         } catch (e) {
-          errorData = { message: `HTTP Error ${response.status}: ${response.statusText}`, path: url };
+          errorData = {
+            message: `HTTP Error ${response.status}: ${response.statusText}`,
+            path: url,
+          };
         }
-        
+
         if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent('global-api-error', { 
-            detail: { 
-              message: errorData.message || 'Lỗi từ máy chủ', 
-              path: errorData.path || url,
-              stack: errorData.stack 
-            } 
-          }));
+          window.dispatchEvent(
+            new CustomEvent("global-api-error", {
+              detail: {
+                message: errorData.message || "Lỗi từ máy chủ",
+                path: errorData.path || url,
+                stack: errorData.stack,
+              },
+            }),
+          );
         }
         return response;
       } else {
@@ -1809,11 +2104,16 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
               bodyParsed.provider = "backup";
               currentOptions.body = JSON.stringify(bodyParsed);
               providerType = "backup";
-              console.warn(`[apiClient Log] Tự động chuyển đổi sang Provider Dự Phòng lớp dưới (backup) do máy chủ lỗi hệ thống.`);
+              console.warn(
+                `[apiClient Log] Tự động chuyển đổi sang Provider Dự Phòng lớp dưới (backup) do máy chủ lỗi hệ thống.`,
+              );
             } catch (e) {}
           }
-          const backoffDelay = Math.pow(2.5, attempt) * 1000 + Math.random() * 1000;
-          console.log(`[apiClient Log] Lỗi hệ thống server (${response.status}). Thử lại sau ${backoffDelay.toFixed(0)}ms...`);
+          const backoffDelay =
+            Math.pow(2.5, attempt) * 1000 + Math.random() * 1000;
+          console.log(
+            `[apiClient Log] Lỗi hệ thống server (${response.status}). Thử lại sau ${backoffDelay.toFixed(0)}ms...`,
+          );
           await new Promise((r) => setTimeout(r, backoffDelay));
           continue;
         } else {
@@ -1821,13 +2121,18 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
           return response;
         }
       }
-
     } catch (error: any) {
       clearTimeout(timeoutId);
-      console.error(`[apiClient Log] Phát hiện lỗi kết nối / timeout đột biến tại lần thử ${attempt}:`, error);
+      console.error(
+        `[apiClient Log] Phát hiện lỗi kết nối / timeout đột biến tại lần thử ${attempt}:`,
+        error,
+      );
 
-      const isTimeoutOrNetwork = error.name === "AbortError" || error.message?.toLowerCase().includes("timeout") || error.message?.toLowerCase().includes("fetch");
-      
+      const isTimeoutOrNetwork =
+        error.name === "AbortError" ||
+        error.message?.toLowerCase().includes("timeout") ||
+        error.message?.toLowerCase().includes("fetch");
+
       if (isTimeoutOrNetwork && attempt < maxAttempts) {
         if (providerType === "primary" && currentOptions.body) {
           try {
@@ -1835,48 +2140,76 @@ async function executeFetchWithBackoffAndEvasion(url: string, options?: RequestI
             bodyParsed.provider = "backup";
             currentOptions.body = JSON.stringify(bodyParsed);
             providerType = "backup";
-            console.warn(`[apiClient Log] Chuyển đổi sang Provider Dự Phòng lớp dưới (backup) do phản hồi kết nối không hoàn thành.`);
+            console.warn(
+              `[apiClient Log] Chuyển đổi sang Provider Dự Phòng lớp dưới (backup) do phản hồi kết nối không hoàn thành.`,
+            );
           } catch (e) {}
         }
-        
+
         if (currentProxy) {
           currentProxy.active = false; // Mark dead proxy
         }
-        
-        const remActive = PROXIES.filter(p => p.active);
-        currentProxy = remActive.length > 0 ? remActive[Math.floor(Math.random() * remActive.length)] : PROXIES[Math.floor(Math.random() * PROXIES.length)];
 
-        const backoffDelay = Math.pow(2.5, attempt) * 1000 + Math.random() * 1000;
-        console.log(`[apiClient Log] Trễ mạng đột biến, chờ ${backoffDelay.toFixed(0)}ms và chạy thử lại với danh tính/proxy mới...`);
+        const remActive = PROXIES.filter((p) => p.active);
+        currentProxy =
+          remActive.length > 0
+            ? remActive[Math.floor(Math.random() * remActive.length)]
+            : PROXIES[Math.floor(Math.random() * PROXIES.length)];
+
+        const backoffDelay =
+          Math.pow(2.5, attempt) * 1000 + Math.random() * 1000;
+        console.log(
+          `[apiClient Log] Trễ mạng đột biến, chờ ${backoffDelay.toFixed(0)}ms và chạy thử lại với danh tính/proxy mới...`,
+        );
         await new Promise((r) => setTimeout(r, backoffDelay));
         continue;
       }
 
-      if (error.name !== 'AbortError') {
+      if (error.name !== "AbortError") {
         handleFailure();
         if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent('global-api-error', { 
-            detail: { message: error.message || 'Không thể kết nối đến máy chủ', path: url } 
-          }));
+          window.dispatchEvent(
+            new CustomEvent("global-api-error", {
+              detail: {
+                message: error.message || "Không thể kết nối đến máy chủ",
+                path: url,
+              },
+            }),
+          );
         }
       }
       throw error;
     }
   }
 
-  throw new Error(`Đã thử lại ${maxAttempts} lần tiến trình nhưng yêu cầu vẫn bất thành.`);
+  throw new Error(
+    `Đã thử lại ${maxAttempts} lần tiến trình nhưng yêu cầu vẫn bất thành.`,
+  );
 }
 
-export async function safeRequest(url: string, options?: RequestInit): Promise<Response> {
+export async function safeRequest(
+  url: string,
+  options?: RequestInit,
+): Promise<Response> {
   if (isTripped) {
-    console.error('CRITICAL WARNING: Circuit Breaker is active. Outbound request blocked.', url);
+    console.error(
+      "CRITICAL WARNING: Circuit Breaker is active. Outbound request blocked.",
+      url,
+    );
     const time = getCooldownTime() / 1000;
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent('global-api-error', { 
-        detail: { message: `Circuit Breaker active. Thử lại sau ${time}s.`, path: url } 
-      }));
+      window.dispatchEvent(
+        new CustomEvent("global-api-error", {
+          detail: {
+            message: `Circuit Breaker active. Thử lại sau ${time}s.`,
+            path: url,
+          },
+        }),
+      );
     }
-    throw new Error(`Hệ thống đang bảo trì tự động. Vui lòng thử lại sau ${time} giây.`);
+    throw new Error(
+      `Hệ thống đang bảo trì tự động. Vui lòng thử lại sau ${time} giây.`,
+    );
   }
 
   // Inject User Custom Auth Headers if available
@@ -1885,7 +2218,10 @@ export async function safeRequest(url: string, options?: RequestInit): Promise<R
     const { store } = await import("../lib/store");
     const currentUser = store.getCurrentUser();
     if (currentUser) {
-      const headers = { ...(mergedOptions.headers || {}) } as Record<string, string>;
+      const headers = { ...(mergedOptions.headers || {}) } as Record<
+        string,
+        string
+      >;
       if (!headers["x-user-id"]) {
         headers["x-user-id"] = currentUser.id || "";
       }
@@ -1895,7 +2231,7 @@ export async function safeRequest(url: string, options?: RequestInit): Promise<R
       if (!headers["x-user-is-pro"]) {
         headers["x-user-is-pro"] = currentUser.isPro ? "true" : "false";
       }
-      
+
       // Auto-inject Firebase Auth token if available
       try {
         const { getAuth } = await import("firebase/auth");
@@ -1909,7 +2245,7 @@ export async function safeRequest(url: string, options?: RequestInit): Promise<R
       } catch (authErr) {
         // Ignored fallback
       }
-      
+
       mergedOptions.headers = headers;
     }
   } catch (err) {
