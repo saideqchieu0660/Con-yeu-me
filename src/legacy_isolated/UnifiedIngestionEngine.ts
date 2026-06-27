@@ -158,6 +158,16 @@ class UnifiedIngestionEngine {
         // Queue back to front, wait a bit before trying again
         this.queue.unshift(chunk);
         await new Promise(r => setTimeout(r, 5000));
+      } else if (err.status === 404) {
+        // Immediate switch provider
+        const failingProvider = err.message.toLowerCase().includes("cerebras") ? "cerebras" : "gemini";
+        if (failingProvider === "cerebras") {
+          rotationEngine.enableCerebras = false;
+        } else {
+          rotationEngine.enableGemini = false;
+        }
+        chunk.retryCount = 0; // reset for new provider
+        this.queue.unshift(chunk);
       } else {
         // Resilient Fallback & Retry Logic
         chunk.retryCount++;
@@ -210,14 +220,16 @@ Text: ${text}`;
           "Authorization": `Bearer ${keyStatus.key}`
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b",
+          model: rotationEngine.cerebrasModel || "gpt-oss-120b",
           messages: [{ role: "user", content: prompt }]
         })
       });
 
       if (!res.ok) {
         rotationEngine.reportError(keyStatus.key, res.status);
-        throw new Error(`Cerebras API Error: ${res.status}`);
+        const err = new Error(`Cerebras API Error: ${res.status}`);
+        (err as any).status = res.status;
+        throw err;
       }
 
       const data = await res.json();

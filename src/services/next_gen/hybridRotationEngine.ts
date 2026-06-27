@@ -14,7 +14,7 @@ class HybridRotationEngine {
   private currentCerebrasIndex: number = 0;
   private currentGeminiIndex: number = 0;
   public geminiModel: string = "gemini-3.5-flash";
-  public cerebrasModel: string = "llama-3.1-8b";
+  public cerebrasModel: string = "gpt-oss-120b";
 
   constructor() {
     this.initializeKeys();
@@ -73,41 +73,50 @@ class HybridRotationEngine {
     const testKey = providerKeys[0];
     
     if (provider === 'cerebras') {
-      const candidateCerebrasModels = [this.cerebrasModel, "llama-3.1-8b", "llama-3.3-70b", "llama3.1-8b"];
-      const uniqueModels = [...new Set(candidateCerebrasModels)];
-      
-      for (const model of uniqueModels) {
-        try {
-          const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${testKey.key}`
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: [{ role: "user", content: "ping" }],
-              max_tokens: 1
-            })
-          });
+      try {
+        const resModels = await fetch("https://api.cerebras.ai/public/v1/models");
+        if (resModels.ok) {
+          const data = await resModels.json();
+          const availableModels = data.data.map((m: any) => m.id);
           
-          if (res.ok) {
-            console.log(`[Cerebras Discovery] Verified and selected model: ${model}`);
-            this.cerebrasModel = model;
-            return true;
-          } else if (res.status === 404) {
-            console.warn(`[Cerebras Discovery] Model ${model} returned 404, trying next...`);
-            continue;
-          } else {
-            this.isolateKey(testKey.key);
-            return false;
+          let selectedModel = this.cerebrasModel;
+          if (!availableModels.includes(selectedModel)) {
+            // switch to the first available production chat model
+            selectedModel = availableModels.find((m: string) => !m.includes("embed")) || availableModels[0];
+            if (selectedModel) {
+              this.cerebrasModel = selectedModel;
+            }
           }
-        } catch (e) {
-          continue;
         }
+      } catch (err) {
+        console.warn("[Cerebras Discovery] Failed to fetch models:", err);
       }
-      this.isolateKey(testKey.key);
-      return false;
+
+      try {
+        const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${testKey.key}`
+          },
+          body: JSON.stringify({
+            model: this.cerebrasModel,
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1
+          })
+        });
+        
+        if (res.ok) {
+          console.log(`[Cerebras Discovery] Verified and selected model: ${this.cerebrasModel}`);
+          return true;
+        } else {
+          this.isolateKey(testKey.key);
+          return false;
+        }
+      } catch (e) {
+        this.isolateKey(testKey.key);
+        return false;
+      }
     } else {
       // Gemini
       const candidateGeminiModels = [this.geminiModel, "gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
@@ -209,7 +218,11 @@ class HybridRotationEngine {
   }
   
   public reportError(keyString: string, status: number) {
-    if (status === 429 || status === 401 || status === 403 || status === 402 || status === 503) {
+    if (status === 404) {
+      this.isolateKey(keyString);
+      return;
+    }
+    if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
       this.isolateKey(keyString);
     }
   }

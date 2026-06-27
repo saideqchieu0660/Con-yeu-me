@@ -1042,7 +1042,7 @@ function handleGroqError(state: KeyState, err: any) {
   const msg = err?.message || err?.toString() || "";
   const errStatus = err?.status || err?.response?.status;
   
-  if (errStatus === 401 || errStatus === 403 || msg.includes("401") || msg.includes("403") || msg.toLowerCase().includes("invalid api key") || msg.toLowerCase().includes("suspended") || msg.toLowerCase().includes("banned") || msg.toLowerCase().includes("auth") || msg.toLowerCase().includes("unauthorized")) {
+  if (errStatus === 401 || errStatus === 403 || errStatus === 404 || msg.includes("401") || msg.includes("403") || msg.includes("404") || msg.toLowerCase().includes("invalid api key") || msg.toLowerCase().includes("suspended") || msg.toLowerCase().includes("banned") || msg.toLowerCase().includes("auth") || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("invalid model") || msg.toLowerCase().includes("invalid endpoint")) {
      state.status = "HARD_LOCKED";
      state.is_banned = true;
      addGroqRotationLog({
@@ -1080,6 +1080,28 @@ const providerThrottleStates: Record<string, number> = {
   groq: 0,
   openrouter: 0
 };
+
+let cachedCerebrasModel = "gpt-oss-120b";
+let hasVerifiedCerebrasModel = false;
+
+async function getCerebrasModel(): Promise<string> {
+  if (hasVerifiedCerebrasModel) return cachedCerebrasModel;
+  try {
+    const res = await fetch("https://api.cerebras.ai/public/v1/models");
+    if (res.ok) {
+      const data = await res.json();
+      const availableModels = data.data.map((m: any) => m.id);
+      if (!availableModels.includes(cachedCerebrasModel)) {
+        const fallback = availableModels.find((m: string) => !m.includes("embed")) || availableModels[0];
+        if (fallback) cachedCerebrasModel = fallback;
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to discover Cerebras models:", e);
+  }
+  hasVerifiedCerebrasModel = true;
+  return cachedCerebrasModel;
+}
 
 async function executeGenerateContentRoundRobin(contents: any, config: any = {}): Promise<string> {
   const isJsonMode = config.responseMimeType === "application/json";
@@ -1159,7 +1181,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
               body: JSON.stringify({
-                model: "llama-3.1-8b",
+                model: await getCerebrasModel(),
                 messages: [
                    ...(config.systemInstruction ? [{ role: "system", content: config.systemInstruction }] : []),
                    { role: "user", content: promptText }

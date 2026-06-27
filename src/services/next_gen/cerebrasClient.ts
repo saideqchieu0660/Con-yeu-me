@@ -6,7 +6,7 @@ export async function executeCerebrasExtraction(
   pushLog?: (msg: string, isError?: boolean) => void
 ) {
   const url = "https://api.cerebras.ai/v1/chat/completions";
-  const modelId = nextGenRotationEngine?.cerebrasModel || "llama-3.1-8b";
+  const modelId = nextGenRotationEngine?.cerebrasModel || "gpt-oss-120b";
   const payload = {
     model: modelId,
     messages: [{ role: "user", content: prompt }],

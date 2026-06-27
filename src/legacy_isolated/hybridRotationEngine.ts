@@ -16,6 +16,7 @@ class HybridRotationEngine {
   // Toggles
   public enableCerebras: boolean = true;
   public enableGemini: boolean = true;
+  public cerebrasModel: string = "gpt-oss-120b";
 
   constructor() {
     this.initializeKeys();
@@ -141,7 +142,13 @@ class HybridRotationEngine {
     const keyObj = this.keys.find(k => k.key === keyString);
     if (!keyObj) return;
 
-    if (statusCode === 429 || statusCode === 402 || statusCode >= 500) {
+    if (statusCode === 404) {
+      keyObj.status = 'ISOLATED';
+      keyObj.isolatedUntil = Date.now() + 60000;
+      return;
+    }
+
+    if (statusCode === 429 || statusCode === 500 || statusCode === 502 || statusCode === 503 || statusCode === 504) {
       keyObj.status = 'ISOLATED';
       keyObj.isolatedUntil = Date.now() + 60000; // 60 seconds lock
     }
@@ -153,8 +160,36 @@ class HybridRotationEngine {
 
     try {
       if (provider === 'cerebras') {
-        const res = await fetch("https://api.cerebras.ai/v1/models", {
-          headers: { "Authorization": `Bearer ${candidate.key}` }
+        try {
+          const resModels = await fetch("https://api.cerebras.ai/public/v1/models");
+          if (resModels.ok) {
+            const data = await resModels.json();
+            const availableModels = data.data.map((m: any) => m.id);
+            
+            let selectedModel = this.cerebrasModel;
+            if (!availableModels.includes(selectedModel)) {
+              // switch to the first available production chat model
+              selectedModel = availableModels.find((m: string) => !m.includes("embed")) || availableModels[0];
+              if (selectedModel) {
+                this.cerebrasModel = selectedModel;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("[Cerebras Discovery] Failed to fetch models:", err);
+        }
+
+        const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${candidate.key}`
+          },
+          body: JSON.stringify({
+            model: this.cerebrasModel,
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1
+          })
         });
         return res.ok;
       } else {
